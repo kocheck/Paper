@@ -114,11 +114,6 @@ struct TTRPGCharacterSheetsApp: App {
                     StateRestorationManager.shared.characterToRestore = characterID
                     StateRestorationManager.shared.shouldRestoreState = true
                     print("✅ Character found, state restoration enabled")
-                    
-                    // Verify that the state was updated as expected for debugging/monitoring
-                    if StateRestorationManager.shared.characterToRestore != characterID {
-                        print("⚠️ StateRestorationManager failed to update characterToRestore to \(characterID)")
-                    }
                 } else {
                     print("⚠️ Character \(characterID) not found in database, skipping restoration")
                 }
