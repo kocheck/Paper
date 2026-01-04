@@ -1,0 +1,235 @@
+name: Pull Request Quality Checks
+
+# NOTE: This workflow contains duplicated logic with accessibility-audit.yml
+# Future improvement: Extract common steps (Xcode selection, SPM caching, dependency resolution)
+# into reusable composite actions to reduce maintenance burden and ensure consistency.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'TTRPGCharacterSheets/**'
+      - '.github/workflows/pr-quality.yml'
+      - '.swiftlint.yml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+env:
+  # Adjust these based on your actual Xcode project configuration
+  SCHEME_NAME: TTRPGCharacterSheets
+  WORKSPACE_NAME: TTRPGCharacterSheets.xcworkspace
+  PROJECT_NAME: TTRPGCharacterSheets.xcodeproj
+  IOS_DESTINATION: 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.0'
+
+jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install SwiftLint
+        run: |
+          brew install swiftlint
+
+      - name: Run SwiftLint
+        run: |
+          # Run SwiftLint and report results
+          # Note: Temporarily not using --strict to allow warnings
+          swiftlint --reporter github-actions-logging
+        working-directory: ./TTRPGCharacterSheets
+
+  build-and-test:
+    name: Build & Unit Tests
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode version
+        run: |
+          # Use latest available Xcode 15.x version on the runner
+          XCODE_PATH=$(ls -d /Applications/Xcode_15*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "Xcode 15.x not found, using default Xcode"
+            xcodebuild -version
+          else
+            echo "Using Xcode at: $XCODE_PATH"
+            sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+            xcodebuild -version
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Install xcpretty
+        run: |
+          if ! command -v xcpretty >/dev/null 2>&1; then
+            gem install xcpretty
+          else
+            echo "xcpretty already installed; skipping gem install."
+          fi
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          if [ -d "$WORKSPACE_NAME" ]; then
+            xcodebuild -resolvePackageDependencies -workspace "$WORKSPACE_NAME" -scheme "$SCHEME_NAME"
+          elif [ -d "$PROJECT_NAME" ]; then
+            xcodebuild -resolvePackageDependencies -project "$PROJECT_NAME" -scheme "$SCHEME_NAME"
+          else
+            echo "Warning: No Xcode project or workspace found. Skipping dependency resolution."
+          fi
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Build for testing
+        run: |
+          if [ -d "$WORKSPACE_NAME" ]; then
+            xcodebuild build-for-testing \
+              -workspace "$WORKSPACE_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -configuration Debug \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              ONLY_ACTIVE_ARCH=YES \
+              | xcpretty
+          elif [ -d "$PROJECT_NAME" ]; then
+            xcodebuild build-for-testing \
+              -project "$PROJECT_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -configuration Debug \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              ONLY_ACTIVE_ARCH=YES \
+              | xcpretty
+          else
+            echo "Error: No Xcode project or workspace found."
+            exit 1
+          fi
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Run unit tests
+        run: |
+          if [ -d "$WORKSPACE_NAME" ]; then
+            xcodebuild test-without-building \
+              -workspace "$WORKSPACE_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -only-testing:TTRPGCharacterSheetsTests \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              | xcpretty --report junit
+          elif [ -d "$PROJECT_NAME" ]; then
+            xcodebuild test-without-building \
+              -project "$PROJECT_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -only-testing:TTRPGCharacterSheetsTests \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              | xcpretty --report junit
+          else
+            echo "Error: No Xcode project or workspace found."
+            exit 1
+          fi
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            build/reports/**/*.junit
+            ~/Library/Logs/scan/**/*.log
+          retention-days: 7
+
+  build-verification:
+    name: Build Verification (iOS 17)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Select Xcode version
+        run: |
+          # Use latest available Xcode 15.x version on the runner
+          XCODE_PATH=$(ls -d /Applications/Xcode_15*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "Xcode 15.x not found, using default Xcode"
+            xcodebuild -version
+          else
+            echo "Using Xcode at: $XCODE_PATH"
+            sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+            xcodebuild -version
+          fi
+
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Build app for iOS 17
+        run: |
+          if [ -d "$WORKSPACE_NAME" ]; then
+            xcodebuild build \
+              -workspace "$WORKSPACE_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -configuration Release \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              ONLY_ACTIVE_ARCH=YES \
+              | xcpretty
+          elif [ -d "$PROJECT_NAME" ]; then
+            xcodebuild build \
+              -project "$PROJECT_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -configuration Release \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              ONLY_ACTIVE_ARCH=YES \
+              | xcpretty
+          else
+            echo "Error: No Xcode project or workspace found."
+            exit 1
+          fi
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Verify build artifacts
+        run: |
+          if [ -d "build" ]; then
+            echo "Listing contents of build directory:"
+            ls -lah build/
+          else
+            echo "No 'build' directory found. Skipping artifact listing."
+          fi
+        working-directory: ./TTRPGCharacterSheets

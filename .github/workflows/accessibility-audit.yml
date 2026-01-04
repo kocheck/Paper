@@ -1,0 +1,435 @@
+name: Accessibility Compliance Audit
+
+# NOTE: This workflow contains duplicated logic with pr-quality.yml
+# Future improvement: Extract common steps (Xcode selection, SPM caching, dependency resolution)
+# into reusable composite actions to reduce maintenance burden and ensure consistency.
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'TTRPGCharacterSheets/**/*.swift'
+      - 'TTRPGCharacterSheets/**/*.xib'
+      - 'TTRPGCharacterSheets/**/*.storyboard'
+      - '.github/workflows/accessibility-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+env:
+  SCHEME_NAME: TTRPGCharacterSheets
+  WORKSPACE_NAME: TTRPGCharacterSheets.xcworkspace
+  PROJECT_NAME: TTRPGCharacterSheets.xcodeproj
+  IOS_DESTINATION: 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.0'
+  UI_TEST_TARGET: TTRPGCharacterSheetsUITests
+
+jobs:
+  accessibility-ui-tests:
+    name: Accessibility UI Tests
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode version
+        run: |
+          # Use latest available Xcode 15.x version on the runner
+          XCODE_PATH=$(ls -d /Applications/Xcode_15*.app 2>/dev/null | sort -V | tail -1)
+          if [ -z "$XCODE_PATH" ]; then
+            echo "Xcode 15.x not found, using default Xcode"
+            xcodebuild -version
+          else
+            echo "Using Xcode at: $XCODE_PATH"
+            sudo xcode-select -s "$XCODE_PATH/Contents/Developer"
+            xcodebuild -version
+          fi
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: List available simulators
+        run: xcrun simctl list devices available
+
+      - name: Cache Swift Package Manager dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            .build
+          key: ${{ runner.os }}-spm-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-spm-
+
+      - name: Create simulator if needed
+        run: |
+          # Check if the required simulator exists
+          if ! xcrun simctl list devices | grep -q "iPad Pro (12.9-inch) (6th generation)"; then
+            echo "Creating iPad Pro simulator..."
+            # Dynamically determine an available iOS 17.x runtime identifier
+            RUNTIME_ID=$(xcrun simctl list runtimes | grep "iOS 17\." | grep -v "unavailable" | head -1 | sed -n 's/.* - \(.*\)$/\1/p')
+            if [ -z "$RUNTIME_ID" ]; then
+              echo "Error: No available iOS 17.x simulator runtime found."
+              echo "Available runtimes:"
+              xcrun simctl list runtimes
+              exit 1
+            fi
+            echo "Using runtime: $RUNTIME_ID"
+            xcrun simctl create "iPad Pro (12.9-inch) (6th generation)" "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-12-9-inch-6th-generation" "$RUNTIME_ID"
+          fi
+
+      - name: Boot simulator
+        run: |
+          SIMULATOR_ID=$(xcrun simctl list devices | grep "iPad Pro (12.9-inch) (6th generation)" | grep -v "unavailable" | head -1 | awk -F'[()]' '{print $(NF-1)}')
+          echo "Booting simulator: $SIMULATOR_ID"
+          xcrun simctl boot "$SIMULATOR_ID" || true
+          
+          echo "Waiting for simulator to boot..."
+          START_TIME=$(date +%s)
+          TIMEOUT=120
+          while true; do
+            BOOTED_COUNT=$(xcrun simctl list devices | grep "$SIMULATOR_ID" | grep -c "(Booted)" || true)
+            if [ "$BOOTED_COUNT" -gt 0 ]; then
+              echo "Simulator $SIMULATOR_ID is booted."
+              break
+            fi
+            
+            NOW=$(date +%s)
+            ELAPSED=$((NOW - START_TIME))
+            if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+              echo "Error: Simulator $SIMULATOR_ID did not boot within ${TIMEOUT}s."
+              echo "Current simulator list for debugging:"
+              xcrun simctl list devices
+              exit 1
+            fi
+            
+            echo "Simulator not booted yet (elapsed: ${ELAPSED}s). Retrying..."
+            sleep 5
+          done
+
+      - name: Install xcpretty
+        run: |
+          if ! command -v xcpretty >/dev/null 2>&1; then
+            gem install xcpretty
+          else
+            echo "xcpretty already installed; skipping gem install."
+          fi
+
+      - name: Resolve Swift Package dependencies
+        run: |
+          if [ -d "$WORKSPACE_NAME" ]; then
+            xcodebuild -resolvePackageDependencies -workspace "$WORKSPACE_NAME" -scheme "$SCHEME_NAME"
+          elif [ -d "$PROJECT_NAME" ]; then
+            xcodebuild -resolvePackageDependencies -project "$PROJECT_NAME" -scheme "$SCHEME_NAME"
+          else
+            echo "Warning: No Xcode project or workspace found. Skipping dependency resolution."
+          fi
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Build for UI testing
+        run: |
+          if [ -d "$WORKSPACE_NAME" ]; then
+            xcodebuild build-for-testing \
+              -workspace "$WORKSPACE_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -configuration Debug \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              ONLY_ACTIVE_ARCH=YES \
+              | xcpretty
+          elif [ -d "$PROJECT_NAME" ]; then
+            xcodebuild build-for-testing \
+              -project "$PROJECT_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -configuration Debug \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              ONLY_ACTIVE_ARCH=YES \
+              | xcpretty
+          else
+            echo "Error: No Xcode project or workspace found."
+            exit 1
+          fi
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Run UI tests with accessibility checks
+        id: ui_tests
+        continue-on-error: true
+        run: |
+          # Run UI tests to check accessibility compliance
+          # Note: Use XCTAccessibilityAudit API in UI tests for automated accessibility checks
+          # See: https://developer.apple.com/documentation/xctest/xctestcase/accessibility_audits
+          if [ -d "$WORKSPACE_NAME" ]; then
+            xcodebuild test-without-building \
+              -workspace "$WORKSPACE_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -only-testing:"$UI_TEST_TARGET" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              | tee ui_test_output.log \
+              | xcpretty --report html --output accessibility-report.html
+          elif [ -d "$PROJECT_NAME" ]; then
+            xcodebuild test-without-building \
+              -project "$PROJECT_NAME" \
+              -scheme "$SCHEME_NAME" \
+              -destination "$IOS_DESTINATION" \
+              -only-testing:"$UI_TEST_TARGET" \
+              CODE_SIGN_IDENTITY="" \
+              CODE_SIGNING_REQUIRED=NO \
+              | tee ui_test_output.log \
+              | xcpretty --report html --output accessibility-report.html
+          else
+            echo "Error: No Xcode project or workspace found."
+            exit 1
+          fi
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Parse accessibility violations
+        if: always()
+        run: |
+          echo "## 🔍 Accessibility Audit Summary" > accessibility-summary.md
+          echo "" >> accessibility-summary.md
+          echo "_Note: This workflow runs UI tests to check for accessibility issues._" >> accessibility-summary.md
+          echo "_To enable automated accessibility audits, implement XCTAccessibilityAudit API in your UI tests._" >> accessibility-summary.md
+          echo "_See: https://developer.apple.com/documentation/xctest/xctestcase/accessibility_audits_" >> accessibility-summary.md
+          echo "" >> accessibility-summary.md
+
+          # Check for test failures in the log
+          if [ -f ui_test_output.log ]; then
+            # Check for XCTest failures which might indicate accessibility issues
+            TEST_FAILURES=$(grep -c "Test Case.*failed" ui_test_output.log || echo "0")
+            ACCESSIBILITY_AUDIT_FAILURES=$(grep -c "Accessibility audit" ui_test_output.log || echo "0")
+            
+            echo "### Test Results:" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            echo "- **Test Failures**: $TEST_FAILURES" >> accessibility-summary.md
+            echo "- **Accessibility Audit Issues**: $ACCESSIBILITY_AUDIT_FAILURES" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            
+            TOTAL_VIOLATIONS=$ACCESSIBILITY_AUDIT_FAILURES
+          else
+            echo "_Note: ui_test_output.log not found. No test results available._" >> accessibility-summary.md
+            TOTAL_VIOLATIONS=0
+          fi
+
+          if [ $TOTAL_VIOLATIONS -eq 0 ]; then
+            echo "" >> accessibility-summary.md
+            echo "✅ **Status**: No accessibility violations detected!" >> accessibility-summary.md
+            echo "status=passed" >> $GITHUB_OUTPUT
+          else
+            echo "" >> accessibility-summary.md
+            echo "⚠️ **Status**: $TOTAL_VIOLATIONS accessibility issue(s) detected" >> accessibility-summary.md
+            echo "status=failed" >> $GITHUB_OUTPUT
+
+            echo "" >> accessibility-summary.md
+            echo "### How to Implement Accessibility Audits:" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            echo "Add XCTAccessibilityAudit API calls in your UI tests:" >> accessibility-summary.md
+            echo '```swift' >> accessibility-summary.md
+            echo 'func testAccessibility() throws {' >> accessibility-summary.md
+            echo '    let app = XCUIApplication()' >> accessibility-summary.md
+            echo '    app.launch()' >> accessibility-summary.md
+            echo '    ' >> accessibility-summary.md
+            echo '    // Perform accessibility audit' >> accessibility-summary.md
+            echo '    try app.performAccessibilityAudit()' >> accessibility-summary.md
+            echo '}' >> accessibility-summary.md
+            echo '```' >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            echo "### Common Accessibility Guidelines:" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            echo "1. **Accessibility Labels**: All interactive elements should have descriptive labels" >> accessibility-summary.md
+            echo "2. **Accessibility Traits**: Buttons should have \`.button\` trait, images \`.image\`, etc." >> accessibility-summary.md
+            echo "3. **Color Contrast**: Maintain 4.5:1 contrast ratio for text (WCAG AA)" >> accessibility-summary.md
+            echo "4. **Touch Targets**: Minimum 44x44 points for all interactive elements" >> accessibility-summary.md
+            echo "5. **VoiceOver Support**: Test navigation with VoiceOver enabled" >> accessibility-summary.md
+          fi
+
+          cat accessibility-summary.md
+        working-directory: ./TTRPGCharacterSheets
+
+      - name: Upload accessibility report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-audit-report
+          path: |
+            TTRPGCharacterSheets/accessibility-report.html
+            TTRPGCharacterSheets/accessibility-summary.md
+            TTRPGCharacterSheets/ui_test_output.log
+          retention-days: 30
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-test-logs
+          path: |
+            ~/Library/Logs/DiagnosticReports/**/*
+            ~/Library/Developer/Xcode/DerivedData/**/Logs/Test/**/*
+          retention-days: 7
+
+      - name: Comment PR with accessibility results
+        if: github.event_name == 'pull_request' && always()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const summaryPath = 'TTRPGCharacterSheets/accessibility-summary.md';
+
+            if (fs.existsSync(summaryPath)) {
+              const summary = fs.readFileSync(summaryPath, 'utf8');
+
+              github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: summary
+              });
+            }
+
+      - name: Fail if accessibility violations found
+        if: steps.ui_tests.outcome == 'failure'
+        run: |
+          echo "❌ Accessibility violations detected. Please review the accessibility report."
+          exit 1
+
+  accessibility-checklist:
+    name: Generate Accessibility Checklist
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate accessibility audit checklist
+        run: |
+          cat << 'EOF' > ACCESSIBILITY_CHECKLIST.md
+          # ♿ Accessibility Compliance Checklist
+
+          ## WCAG 2.1 Level AA Requirements
+
+          ### ✅ Perceivable
+          - [ ] All images have accessibility labels (`.accessibilityLabel`)
+          - [ ] All custom controls have accessibility labels
+          - [ ] Color contrast ratio meets 4.5:1 for normal text, 3:1 for large text
+          - [ ] UI works in both light and dark modes
+          - [ ] Information conveyed by color is also available through text/icons
+
+          ### ✅ Operable
+          - [ ] All interactive elements have minimum 44x44pt touch targets
+          - [ ] All functionality is keyboard accessible (for external keyboards)
+          - [ ] Focus order follows logical reading order
+          - [ ] No flashing content that could trigger seizures (< 3 flashes/second)
+          - [ ] Gestures have accessible alternatives (e.g., buttons for swipe actions)
+
+          ### ✅ Understandable
+          - [ ] All buttons have clear, descriptive labels
+          - [ ] Form fields have associated labels
+          - [ ] Error messages are clear and provide correction suggestions
+          - [ ] Navigation is consistent throughout the app
+          - [ ] Instructions are provided where needed
+
+          ### ✅ Robust
+          - [ ] App works with VoiceOver enabled
+          - [ ] App works with Dynamic Type (larger text sizes)
+          - [ ] App works with Reduce Motion enabled
+          - [ ] App works with Increase Contrast enabled
+          - [ ] Semantic HTML/SwiftUI elements used (not just visual styling)
+
+          ## iOS-Specific Accessibility Features
+
+          ### VoiceOver Testing
+          - [ ] All screens navigable with VoiceOver
+          - [ ] Correct accessibility traits assigned (`.button`, `.image`, `.header`, etc.)
+          - [ ] Custom accessibility actions implemented where appropriate
+          - [ ] Grouped elements use `.accessibilityElement(children: .combine)` appropriately
+
+          ### Dynamic Type
+          - [ ] Text scales properly with Dynamic Type settings
+          - [ ] Layout adapts to larger text (no clipping/overlap)
+          - [ ] Images scale or reflow appropriately
+
+          ### Reduce Motion
+          - [ ] Animations respect `.accessibilityReduceMotion` setting
+          - [ ] Essential motion (navigation) still works with reduced motion
+
+          ### Additional iOS Features
+          - [ ] Supports Switch Control for users with motor impairments
+          - [ ] Supports Voice Control for hands-free operation
+          - [ ] Supports AssistiveTouch customizations
+
+          ## Testing Procedures
+
+          ### Automated Testing
+          1. Implement XCTAccessibilityAudit API in UI tests (recommended approach)
+          2. Use Xcode Accessibility Inspector during development
+          3. Review Xcode warnings for missing labels/traits
+          4. Run UI tests through this GitHub Actions workflow
+
+          **Example XCTAccessibilityAudit implementation:**
+          \`\`\`swift
+          func testAccessibility() throws {
+              let app = XCUIApplication()
+              app.launch()
+              
+              // Perform accessibility audit on the current screen
+              try app.performAccessibilityAudit()
+          }
+          \`\`\`
+
+          ### Manual Testing
+          1. Enable VoiceOver: Settings → Accessibility → VoiceOver
+          2. Navigate entire app using only VoiceOver
+          3. Test with largest Dynamic Type size
+          4. Test with Reduce Motion enabled
+          5. Test with Increase Contrast enabled
+          6. Test in both light and dark modes
+
+          ### User Testing
+          - [ ] Test with real users who rely on accessibility features
+          - [ ] Gather feedback on VoiceOver experience
+          - [ ] Validate that all core flows are accessible
+
+          ## Common Issues to Avoid
+
+          1. **Missing Labels**: Always set `.accessibilityLabel()` on custom views
+          2. **Wrong Traits**: Use `.accessibilityAddTraits(.isButton)` for tappable elements
+          3. **Decorative Images**: Mark as `.accessibilityHidden(true)` if purely decorative
+          4. **Poor Contrast**: Test colors with contrast checker tools
+          5. **Small Touch Targets**: Ensure all tappable areas are ≥ 44x44 points
+          6. **Hard-coded Text Sizes**: Use Dynamic Type instead of fixed font sizes
+          7. **Complex Gestures**: Provide button alternatives for multi-finger/directional gestures
+
+          ## Resources
+
+          - [Apple Human Interface Guidelines - Accessibility](https://developer.apple.com/design/human-interface-guidelines/accessibility)
+          - [WCAG 2.1 Guidelines](https://www.w3.org/WAI/WCAG21/quickref/)
+          - [Apple Accessibility Programming Guide](https://developer.apple.com/accessibility/)
+          - [SwiftUI Accessibility Documentation](https://developer.apple.com/documentation/swiftui/view-accessibility)
+
+          ---
+
+          **Last Updated**: $(date +%Y-%m-%d)
+          **Audit Tool**: GitHub Actions Accessibility Workflow
+          EOF
+
+          echo "✅ Accessibility checklist generated"
+          cat ACCESSIBILITY_CHECKLIST.md
+
+      - name: Upload checklist
+        uses: actions/upload-artifact@v4
+        with:
+          name: accessibility-checklist
+          path: ACCESSIBILITY_CHECKLIST.md
+          retention-days: 90
