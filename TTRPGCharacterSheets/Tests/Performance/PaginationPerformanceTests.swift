@@ -181,7 +181,7 @@ final class PaginationPerformanceTests: XCTestCase {
     // MARK: - Baseline Metrics
 
     func testPageNavigationBaseline() throws {
-        // Baseline: Page navigation should complete in < 16ms (60 FPS)
+        // Baseline: Page navigation state updates should complete quickly
         let template = Template(name: "Test Template", pdfData: createMultiPagePDF())
         modelContext.insert(template)
 
@@ -189,13 +189,13 @@ final class PaginationPerformanceTests: XCTestCase {
         modelContext.insert(character)
 
         let options = XCTMeasureOptions()
-        options.iterationCount = 60 // Simulate 60 FPS requirement
+        options.iterationCount = 60
 
         measure(metrics: [XCTClockMetric()], options: options) {
             character.lastViewedPageIndex = (character.lastViewedPageIndex + 1) % 4
         }
 
-        // Note: Target < 0.016 seconds (60 FPS)
+        // Note: Measures model property update performance, not UI rendering
     }
 
     // MARK: - Helper Methods

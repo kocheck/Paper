@@ -58,10 +58,7 @@ struct CharacterEditorView: View {
                             get: { vm.currentPageIndex },
                             set: { vm.currentPageIndex = $0 }
                         ),
-                        hasUnsavedChanges: Binding(
-                            get: { vm.hasUnsavedChanges },
-                            set: { if $0 { vm.markDrawingChanged() } else { vm.clearUnsavedChanges() } }
-                        )
+                        hasUnsavedChanges: $vm.hasUnsavedChanges
                     )
                     .ignoresSafeArea(edges: .bottom)
                     .environment(\.characterEditorViewModel, vm)
@@ -74,10 +71,7 @@ struct CharacterEditorView: View {
                             get: { vm.currentPageIndex },
                             set: { vm.currentPageIndex = $0 }
                         ),
-                        hasUnsavedChanges: Binding(
-                            get: { vm.hasUnsavedChanges },
-                            set: { if $0 { vm.markDrawingChanged() } else { vm.clearUnsavedChanges() } }
-                        )
+                        hasUnsavedChanges: $vm.hasUnsavedChanges
                     )
                     .environment(\.characterEditorViewModel, vm)
                 }
@@ -408,10 +402,8 @@ struct PencilKitCanvasView: UIViewRepresentable {
         canvas.becomeFirstResponder()
 
         // Store reference and expose undo manager
-        DispatchQueue.main.async {
-            canvasView = canvas
-            onUndoManagerChanged?(canvas.undoManager)
-        }
+        canvasView = canvas
+        onUndoManagerChanged?(canvas.undoManager)
 
         return canvas
     }

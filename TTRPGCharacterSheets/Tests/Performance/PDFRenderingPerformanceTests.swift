@@ -74,8 +74,7 @@ final class PDFRenderingPerformanceTests: XCTestCase {
             return
         }
 
-        let options = XCTMeasureOptions()
-        measure(metrics: [XCTClockMetric(), XCTMemoryMetric()], options: options) {
+        measure(metrics: [XCTClockMetric(), XCTMemoryMetric()]) {
             // Simulate rendering at iPad resolution
             let bounds = CGRect(x: 0, y: 0, width: 1024, height: 1366)
             UIGraphicsBeginImageContextWithOptions(bounds.size, false, 2.0)
