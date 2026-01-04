@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import os
 
 @main
 struct TTRPGCharacterSheetsApp: App {
@@ -21,16 +22,11 @@ struct TTRPGCharacterSheetsApp: App {
             PageDrawing.self
         ])
 
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
-            isStoredInMemoryOnly: false,
-            allowsSave: true
-        )
-
         do {
-            return try ModelContainer(
-                for: schema,
-                configurations: [modelConfiguration]
+            // Use App Group container for sharing with Widget Extension
+            return try AppGroupContainer.createModelContainer(
+                schema: schema,
+                isStoredInMemoryOnly: false
             )
         } catch {
             fatalError("Failed to create ModelContainer: \(error.localizedDescription)")
@@ -43,12 +39,95 @@ struct TTRPGCharacterSheetsApp: App {
             MainLibraryView()
                 .modelContainer(modelContainer)
                 .environmentObject(StateRestorationManager.shared)
+                .onOpenURL { url in
+                    handleDeepLink(url)
+                }
+        }
+    }
+
+    // MARK: - Deep Linking
+
+    /// Handles deep link URLs from widgets and other sources
+    private func handleDeepLink(_ url: URL) {
+        print("🔗 Deep link received: \(url)")
+
+        // Expected formats:
+        // - ttrpgcharactersheets://character/{uuid} (host-based)
+        // - ttrpgcharactersheets:///character/{uuid} (path-based)
+        guard url.scheme == "ttrpgcharactersheets" else {
+            print("❌ Invalid deep link scheme: \(url.scheme ?? "nil")")
+            return
+        }
+
+        // Extract character ID from URL components
+        let pathComponents = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+
+        // Determine where "character" appears (host vs first path component)
+        let characterIDString: String?
+        if url.host == "character" {
+            // Format: ttrpgcharactersheets://character/{uuid}
+            guard pathComponents.count == 1 else {
+                print("❌ Invalid path structure for deep link with host 'character': \(pathComponents)")
+                return
+            }
+            characterIDString = pathComponents.first
+        } else if pathComponents.first == "character" {
+            // Format: ttrpgcharactersheets:///character/{uuid}
+            guard pathComponents.count == 2 else {
+                print("❌ Invalid path structure for deep link with 'character' in path: \(pathComponents)")
+                return
+            }
+            characterIDString = pathComponents.last
+        } else {
+            print("❌ Invalid deep link host or path; expected 'character' segment")
+            return
+        }
+
+        guard let characterIDString,
+              let characterID = UUID(uuidString: characterIDString) else {
+            print("❌ Invalid character ID format in deep link: \(characterIDString ?? "nil")")
+            return
+        }
+
+        print("✅ Opening character: \(characterID)")
+
+        // Validate that the character exists before setting it for restoration
+        // Dispatch to main thread since StateRestorationManager has @Published properties
+        Task { @MainActor in
+            if Task.isCancelled {
+                print("⚠️ State restoration task was cancelled before updating for character: \(characterID)")
+                return
+            }
+            
+            // Check if character exists in the database
+            let descriptor = FetchDescriptor<Character>(
+                predicate: #Predicate { character in
+                    character.id == characterID
+                }
+            )
+            
+            do {
+                let context = ModelContext(modelContainer)
+                let characters = try context.fetch(descriptor)
+                
+                if !characters.isEmpty {
+                    // Character exists - proceed with restoration
+                    StateRestorationManager.shared.characterToRestore = characterID
+                    StateRestorationManager.shared.shouldRestoreState = true
+                    print("✅ Character found, state restoration enabled")
+                } else {
+                    print("⚠️ Character \(characterID) not found in database, skipping restoration")
+                }
+            } catch {
+                print("❌ Failed to validate character existence: \(error)")
+            }
         }
     }
 }
 
 // MARK: - State Restoration Manager
 /// Manages app state restoration for seamless user experience
+/// Uses App Group shared UserDefaults for widget access
 class StateRestorationManager: ObservableObject {
     static let shared = StateRestorationManager()
 
@@ -56,30 +135,63 @@ class StateRestorationManager: ObservableObject {
     @Published var characterToRestore: UUID?
     @Published var pageIndexToRestore: Int = 0
 
+    /// Logger for state restoration operations
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TTRPGCharacterSheets", category: "StateRestoration")
+
+    /// Shared UserDefaults for App Group access
+    /// Main app writes state that the widget extension reads
+    private var sharedDefaults: UserDefaults? {
+        UserDefaults(suiteName: AppGroupContainer.identifier)
+    }
+
     private init() {
         loadRestorationState()
     }
 
-    /// Loads the restoration state from UserDefaults
+    /// Loads the restoration state from shared UserDefaults
     func loadRestorationState() {
-        if let characterIDString = UserDefaults.standard.string(forKey: "lastViewedCharacterID"),
+        guard let defaults = sharedDefaults else {
+            Self.logger.error("sharedDefaults is nil - App Groups may not be configured properly")
+            #if DEBUG
+            assertionFailure("StateRestorationManager: sharedDefaults is nil - App Groups configuration required")
+            #endif
+            return
+        }
+
+        if let characterIDString = defaults.string(forKey: "lastViewedCharacterID"),
            let characterID = UUID(uuidString: characterIDString) {
             self.characterToRestore = characterID
-            self.pageIndexToRestore = UserDefaults.standard.integer(forKey: "lastViewedPageIndex")
+            self.pageIndexToRestore = defaults.integer(forKey: "lastViewedPageIndex")
             self.shouldRestoreState = true
         }
     }
 
-    /// Saves the current state for restoration
+    /// Saves the current state for restoration (accessible by widget)
     func saveState(characterID: UUID, pageIndex: Int) {
-        UserDefaults.standard.set(characterID.uuidString, forKey: "lastViewedCharacterID")
-        UserDefaults.standard.set(pageIndex, forKey: "lastViewedPageIndex")
+        guard let defaults = sharedDefaults else {
+            Self.logger.error("saveState: sharedDefaults is nil - App Groups may not be configured properly")
+            #if DEBUG
+            assertionFailure("StateRestorationManager.saveState: sharedDefaults is nil - App Groups configuration required")
+            #endif
+            return
+        }
+
+        defaults.set(characterID.uuidString, forKey: "lastViewedCharacterID")
+        defaults.set(pageIndex, forKey: "lastViewedPageIndex")
     }
 
     /// Clears the restoration state
     func clearState() {
-        UserDefaults.standard.removeObject(forKey: "lastViewedCharacterID")
-        UserDefaults.standard.removeObject(forKey: "lastViewedPageIndex")
+        guard let defaults = sharedDefaults else {
+            Self.logger.error("clearState: sharedDefaults is nil - App Groups may not be configured properly")
+            #if DEBUG
+            assertionFailure("StateRestorationManager.clearState: sharedDefaults is nil - App Groups configuration required")
+            #endif
+            return
+        }
+
+        defaults.removeObject(forKey: "lastViewedCharacterID")
+        defaults.removeObject(forKey: "lastViewedPageIndex")
         self.characterToRestore = nil
         self.pageIndexToRestore = 0
         self.shouldRestoreState = false
