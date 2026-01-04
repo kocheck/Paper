@@ -67,13 +67,12 @@ enum AppGroupContainer {
         // For non-memory containers, return cached instance if available
         if !isStoredInMemoryOnly {
             containerLock.lock()
+            let cached = cachedModelContainer
+            containerLock.unlock()
             
-            if let cached = cachedModelContainer {
-                containerLock.unlock()
+            if let cached = cached {
                 return cached
             }
-            
-            containerLock.unlock()
         }
         
         // Validate App Group access and create directory if needed
