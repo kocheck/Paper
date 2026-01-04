@@ -69,8 +69,11 @@ struct TTRPGCharacterSheetsApp: App {
         print("✅ Opening character: \(characterID)")
 
         // Update state restoration manager to open this character
-        StateRestorationManager.shared.characterToRestore = characterID
-        StateRestorationManager.shared.shouldRestoreState = true
+        // Dispatch to main thread since StateRestorationManager has @Published properties
+        Task { @MainActor in
+            StateRestorationManager.shared.characterToRestore = characterID
+            StateRestorationManager.shared.shouldRestoreState = true
+        }
     }
 }
 
@@ -84,7 +87,8 @@ class StateRestorationManager: ObservableObject {
     @Published var characterToRestore: UUID?
     @Published var pageIndexToRestore: Int = 0
 
-    /// Shared UserDefaults for App Group access (widget can read this)
+    /// Shared UserDefaults for App Group access
+    /// Main app writes state that the widget extension reads
     private var sharedDefaults: UserDefaults? {
         UserDefaults(suiteName: AppGroupContainer.identifier)
     }

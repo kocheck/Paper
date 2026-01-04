@@ -31,9 +31,9 @@ enum AppGroupContainer {
         containerURL?.appendingPathComponent("SwiftData.sqlite")
     }
 
-    /// Validates that the App Group container is accessible
+    /// Validates that the App Group container is accessible and creates directory if needed
     /// - Returns: True if container is accessible, false otherwise
-    static func validateAccess() -> Bool {
+    static func ensureContainerAccess() -> Bool {
         guard let url = containerURL else {
             print("⚠️ App Group container not accessible. Check entitlements configuration.")
             return false
@@ -67,15 +67,17 @@ enum AppGroupContainer {
         // For non-memory containers, return cached instance if available
         if !isStoredInMemoryOnly {
             containerLock.lock()
-            defer { containerLock.unlock() }
             
             if let cached = cachedModelContainer {
+                containerLock.unlock()
                 return cached
             }
+            
+            containerLock.unlock()
         }
         
-        // Validate App Group access
-        guard validateAccess() else {
+        // Validate App Group access and create directory if needed
+        guard ensureContainerAccess() else {
             throw AppGroupError.containerNotAccessible
         }
 
