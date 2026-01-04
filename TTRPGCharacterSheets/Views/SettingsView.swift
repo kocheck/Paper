@@ -176,21 +176,9 @@ struct SettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Link(destination: URL(string: "https://github.com")!) {
-                HStack {
-                    Text("Source Code")
-                    Spacer()
-                    Image(systemName: "arrow.up.right.square")
-                }
-            }
-
-            Link(destination: URL(string: "https://github.com")!) {
-                HStack {
-                    Text("Report an Issue")
-                    Spacer()
-                    Image(systemName: "arrow.up.right.square")
-                }
-            }
+            Text("Source code repository and issue tracker links will be added in a future update.")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
         } header: {
             Text("About")
         }
