@@ -290,16 +290,16 @@ xcodebuild test -scheme TTRPGCharacterSheetsUITests -destination 'platform=iOS S
 
 ## 🔒 Data Privacy
 
-- All data stored locally on device
-- No cloud sync or external servers
+- All data stored locally on device by default
+- Optional iCloud sync stores data in your private Apple iCloud account (no third-party servers)
 - PDF data uses SwiftData external storage for efficiency
 - No analytics or tracking
 
 ## 🎯 Future Enhancements
 
 ### Planned Features
-- [ ] iCloud sync for cross-device access
-- [ ] PDF export with annotations baked in
+- [x] iCloud sync for cross-device access
+- [x] PDF export with annotations baked in
 - [ ] Dice roller integration
 - [ ] Character templates marketplace
 - [ ] Collaborative editing (SharePlay)
