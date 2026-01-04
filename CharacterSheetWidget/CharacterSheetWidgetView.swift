@@ -18,10 +18,14 @@ struct CharacterSheetWidgetView: View {
             // Background
             Color(.systemBackground)
 
-            if let characterID = entry.characterID {
+            if let characterID = entry.characterID,
+               let deepLinkURL = createDeepLinkURL(characterID: characterID) {
                 // Character sheet content
                 characterSheetContent
-                    .widgetURL(createDeepLinkURL(characterID: characterID))
+                    .widgetURL(deepLinkURL)
+            } else if entry.characterID != nil {
+                // Character exists but URL creation failed - show without link
+                characterSheetContent
             } else {
                 // Empty state
                 emptyStateView
