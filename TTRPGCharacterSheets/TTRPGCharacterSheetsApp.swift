@@ -50,19 +50,41 @@ struct TTRPGCharacterSheetsApp: App {
     private func handleDeepLink(_ url: URL) {
         print("🔗 Deep link received: \(url)")
 
-        // Expected format: ttrpgcharactersheets://character/{uuid}
-        guard url.scheme == "ttrpgcharactersheets",
-              url.host == "character" else {
-            print("❌ Invalid deep link scheme or host")
+        // Expected formats:
+        // - ttrpgcharactersheets://character/{uuid} (host-based)
+        // - ttrpgcharactersheets:///character/{uuid} (path-based)
+        guard url.scheme == "ttrpgcharactersheets" else {
+            print("❌ Invalid deep link scheme: \(url.scheme ?? "nil")")
             return
         }
 
-        // Extract character ID from path
-        let pathComponents = url.pathComponents.filter { $0 != "/" }
-        guard pathComponents.count == 1,
-              let characterIDString = pathComponents.first,
+        // Extract character ID from URL components
+        let pathComponents = url.pathComponents.filter { $0 != "/" && !$0.isEmpty }
+
+        // Determine where "character" appears (host vs first path component)
+        let characterIDString: String?
+        if url.host == "character" {
+            // Format: ttrpgcharactersheets://character/{uuid}
+            guard pathComponents.count == 1 else {
+                print("❌ Invalid path structure for deep link with host 'character': \(pathComponents)")
+                return
+            }
+            characterIDString = pathComponents.first
+        } else if pathComponents.first == "character" {
+            // Format: ttrpgcharactersheets:///character/{uuid}
+            guard pathComponents.count == 2 else {
+                print("❌ Invalid path structure for deep link with 'character' in path: \(pathComponents)")
+                return
+            }
+            characterIDString = pathComponents.last
+        } else {
+            print("❌ Invalid deep link host or path; expected 'character' segment")
+            return
+        }
+
+        guard let characterIDString,
               let characterID = UUID(uuidString: characterIDString) else {
-            print("❌ Invalid character ID or path structure in deep link")
+            print("❌ Invalid character ID format in deep link: \(characterIDString ?? "nil")")
             return
         }
 
