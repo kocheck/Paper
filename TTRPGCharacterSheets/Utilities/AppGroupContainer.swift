@@ -14,6 +14,11 @@ enum AppGroupContainer {
     /// App Group identifier (must match entitlements)
     static let identifier = "group.com.ttrpg.charactersheets"
 
+    /// Cached shared ModelContainer for widget use
+    /// This reduces overhead from repeatedly creating containers
+    private static var cachedModelContainer: ModelContainer?
+    private static let containerLock = NSLock()
+
     /// Shared container URL for the App Group
     /// - Returns: URL to the shared container directory
     static var containerURL: URL? {
@@ -59,6 +64,16 @@ enum AppGroupContainer {
         schema: Schema,
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
+        // For non-memory containers, return cached instance if available
+        if !isStoredInMemoryOnly {
+            containerLock.lock()
+            defer { containerLock.unlock() }
+            
+            if let cached = cachedModelContainer {
+                return cached
+            }
+        }
+        
         // Validate App Group access
         guard validateAccess() else {
             throw AppGroupError.containerNotAccessible
@@ -87,7 +102,16 @@ enum AppGroupContainer {
             )
         }
 
-        return try ModelContainer(for: schema, configurations: [configuration])
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        
+        // Cache the container for reuse (only for persistent storage)
+        if !isStoredInMemoryOnly {
+            containerLock.lock()
+            cachedModelContainer = container
+            containerLock.unlock()
+        }
+        
+        return container
     }
 
     /// Errors related to App Group container access

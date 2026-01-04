@@ -41,6 +41,8 @@ struct CharacterSheetWidgetView: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
+                        .accessibilityLabel("Character sheet for \(entry.characterName)")
+                        .accessibilityHint("Tap to open \(entry.characterName) in the app")
                 } else {
                     // Fallback placeholder
                     placeholderView
@@ -93,6 +95,7 @@ struct CharacterSheetWidgetView: View {
             Image(systemName: "doc.text.fill")
                 .font(.system(size: emptyStateIconSize))
                 .foregroundColor(.secondary)
+                .accessibilityHidden(true)
 
             VStack(spacing: 4) {
                 Text("No Character")
@@ -106,6 +109,9 @@ struct CharacterSheetWidgetView: View {
             }
         }
         .padding()
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("No character selected")
+        .accessibilityHint("Open the TTRPG Character Sheets app to view a character in this widget")
     }
 
     // MARK: - Placeholder
@@ -194,10 +200,10 @@ struct CharacterSheetWidgetView: View {
 
     // MARK: - Deep Link URL
 
-    private func createDeepLinkURL(characterID: UUID) -> URL {
+    private func createDeepLinkURL(characterID: UUID) -> URL? {
         // Create deep link URL for opening the character in the main app
         // Format: ttrpgcharactersheets://character/{characterID}
-        URL(string: "ttrpgcharactersheets://character/\(characterID.uuidString)")!
+        URL(string: "ttrpgcharactersheets://character/\(characterID.uuidString)")
     }
 }
 

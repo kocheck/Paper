@@ -39,11 +39,16 @@ struct CharacterEntity: AppEntity {
 
 /// Query provider for character entities
 struct CharacterEntityQuery: EntityQuery {
+    
+    /// Shared schema for all queries to enable container caching
+    fileprivate static let schema = Schema([Template.self, Character.self, PageDrawing.self])
+    
     func entities(for identifiers: [UUID]) async throws -> [CharacterEntity] {
         guard let modelContainer = try? AppGroupContainer.createModelContainer(
-            schema: Schema([Template.self, Character.self, PageDrawing.self]),
+            schema: Self.schema,
             isStoredInMemoryOnly: false
         ) else {
+            WidgetLogger.error("Failed to create model container for entity query")
             return []
         }
 
@@ -63,16 +68,17 @@ struct CharacterEntityQuery: EntityQuery {
                 )
             }
         } catch {
-            print("Failed to fetch characters: \(error)")
+            WidgetLogger.error("Failed to fetch characters for identifiers", error: error)
             return []
         }
     }
 
     func suggestedEntities() async throws -> [CharacterEntity] {
         guard let modelContainer = try? AppGroupContainer.createModelContainer(
-            schema: Schema([Template.self, Character.self, PageDrawing.self]),
+            schema: Self.schema,
             isStoredInMemoryOnly: false
         ) else {
+            WidgetLogger.error("Failed to create model container for suggested entities")
             return []
         }
 
@@ -91,7 +97,7 @@ struct CharacterEntityQuery: EntityQuery {
                 )
             }
         } catch {
-            print("Failed to fetch characters: \(error)")
+            WidgetLogger.error("Failed to fetch suggested characters", error: error)
             return []
         }
     }
@@ -111,11 +117,12 @@ struct CharacterOptionsProvider: DynamicOptionsProvider {
             return nil
         }
 
-        // Fetch the character
+        // Fetch the character using the shared schema
         guard let modelContainer = try? AppGroupContainer.createModelContainer(
-            schema: Schema([Template.self, Character.self, PageDrawing.self]),
+            schema: CharacterEntityQuery.schema,
             isStoredInMemoryOnly: false
         ) else {
+            WidgetLogger.error("Failed to create model container for default result")
             return nil
         }
 
@@ -134,7 +141,7 @@ struct CharacterOptionsProvider: DynamicOptionsProvider {
                 )
             }
         } catch {
-            print("Failed to fetch default character: \(error)")
+            WidgetLogger.error("Failed to fetch default character", error: error)
         }
 
         return nil

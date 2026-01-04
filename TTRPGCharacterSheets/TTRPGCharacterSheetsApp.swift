@@ -59,9 +59,10 @@ struct TTRPGCharacterSheetsApp: App {
 
         // Extract character ID from path
         let pathComponents = url.pathComponents.filter { $0 != "/" }
-        guard let characterIDString = pathComponents.first,
+        guard pathComponents.count == 1,
+              let characterIDString = pathComponents.first,
               let characterID = UUID(uuidString: characterIDString) else {
-            print("❌ Invalid character ID in deep link")
+            print("❌ Invalid character ID or path structure in deep link")
             return
         }
 
