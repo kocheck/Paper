@@ -192,7 +192,8 @@ struct CharacterEditorView: View {
             get: { vm.showingSaveError },
             set: { if !$0 { vm.showingSaveError = false } }
         )) {
-            // Dismissal is handled automatically by the binding above
+            // Empty action - alert dismissal is automatically handled by the isPresented binding
+            // When the user taps OK, SwiftUI sets isPresented to false, which triggers the setter above
             Button("OK", role: .cancel) { }
         } message: {
             Text(vm.saveErrorMessage ?? "An unknown error occurred while saving.")
