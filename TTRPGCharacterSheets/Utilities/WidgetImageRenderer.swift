@@ -253,7 +253,7 @@ enum WidgetImageRenderer {
     }
 
     /// Validates that rendering won't exceed widget memory limits
-    /// Widgets have strict memory limits (typically 30-50MB depending on device)
+    /// Widgets have strict memory limits. This enforces a 20MB limit for image rendering.
     private static func isWithinMemoryLimits(for configuration: RenderConfiguration) -> Bool {
         let size = configuration.targetSize
         let scale = configuration.scale

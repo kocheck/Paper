@@ -228,7 +228,11 @@ struct CharacterSheetWidget: Widget {
         .configurationDisplayName("Character Sheet")
         .description("View your TTRPG character sheet at a glance")
         .supportedFamilies([.systemLarge, .systemExtraLarge])
-        .contentMarginsDisabled()  // Remove default margins for full-bleed images
+        // Disable content margins for full-bleed character sheet images
+        // The rendered snapshot is already sized appropriately for systemLarge and systemExtraLarge
+        // widget families with proper safe area insets, so removing margins allows the character
+        // sheet to fill the entire widget without clipping important content
+        .contentMarginsDisabled()
     }
 }
 

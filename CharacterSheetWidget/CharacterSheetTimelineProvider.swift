@@ -24,6 +24,12 @@ struct CharacterSheetEntry: TimelineEntry {
 struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
     typealias Entry = CharacterSheetEntry
     typealias Intent = SelectCharacterIntent
+    
+    // MARK: - Configuration
+    
+    /// Widget refresh interval in minutes
+    /// Determines how frequently the widget updates to reflect changes made in the main app
+    private static let refreshIntervalMinutes = 15
 
     // MARK: - Placeholder
 
@@ -53,9 +59,13 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
     func timeline(for configuration: SelectCharacterIntent, in context: Context) async -> Timeline<CharacterSheetEntry> {
         let entry = await fetchCharacterEntry(for: configuration, in: context)
 
-        // Update timeline every 15 minutes
+        // Update timeline based on configured refresh interval
         // This allows the widget to refresh if the user modifies the character
-        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
+        let nextUpdate = Calendar.current.date(
+            byAdding: .minute,
+            value: Self.refreshIntervalMinutes,
+            to: Date()
+        ) ?? Date()
 
         return Timeline(entries: [entry], policy: .after(nextUpdate))
     }
@@ -101,7 +111,9 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
         configuration: SelectCharacterIntent,
         context: Context
     ) async -> CharacterSheetEntry {
-        // Create model container
+        // Create model container (uses cached instance via AppGroupContainer)
+        // The container caching in AppGroupContainer reduces overhead from
+        // repeated container creation across timeline updates and intent queries
         guard let modelContainer = try? AppGroupContainer.createModelContainer(
             schema: Schema([Template.self, Character.self, PageDrawing.self]),
             isStoredInMemoryOnly: false
