@@ -125,17 +125,28 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
         // Validate that the cached container's schema matches the requested schema.
         // This helps catch cases where the schema has changed but the cached container
         // is still using an outdated schema (e.g., after an app update).
+        //
+        // Limitation: This validation only compares entity names, not their properties.
+        // Schema changes where entity names stay the same but properties change
+        // (added/removed attributes, changed relationships, etc.) will not be detected here.
+        // SwiftData migrations handle property-level changes, but this validation won't
+        // catch them. This is acceptable since property changes typically don't break
+        // widget rendering, while entity additions/removals would cause fetch errors.
         let cachedSchemaModels = Set(modelContainer.schema.entities.map { $0.name })
         let expectedSchemaModels = Set(expectedSchema.entities.map { $0.name })
         if cachedSchemaModels != expectedSchemaModels {
             WidgetLogger.error("""
-                Schema mismatch detected. Expected: \(expectedSchemaModels), \
-                Got: \(cachedSchemaModels). Widget entry will be invalidated.
+                Schema mismatch detected.
+                Expected: \(expectedSchemaModels)
+                Got: \(cachedSchemaModels)
+                Widget entry will be invalidated.
                 """)
             #if DEBUG
             assertionFailure("""
-                Schema mismatch detected. Expected: \(expectedSchemaModels), \
-                Got: \(cachedSchemaModels). Force-quit app/widget to reload schema.
+                Schema mismatch detected.
+                Expected: \(expectedSchemaModels)
+                Got: \(cachedSchemaModels)
+                Force-quit app/widget to reload schema.
                 """)
             #endif
             return createErrorEntry(configuration: configuration, characterID: characterID)

@@ -29,11 +29,13 @@ enum AppGroupContainer {
     /// 
     /// **Warning:** Only call this if you need to recreate the container (e.g., after schema changes
     /// during development). The next call to `createModelContainer` will create a fresh instance.
+    #if DEBUG
     static func invalidateCache() {
         containerLock.lock()
         defer { containerLock.unlock() }
         cachedModelContainer = nil
     }
+    #endif
 
     /// Shared container URL for the App Group
     /// - Returns: URL to the shared container directory
@@ -91,6 +93,11 @@ enum AppGroupContainer {
         //   cached ModelContainer instance since read operations do not require exclusive access.
         // - For write operations (which widgets should not perform), ModelContext handles
         //   coordination internally via the container's persistent store coordinator.
+        // - Race condition caveat: The returned container could theoretically be invalidated
+        //   (via invalidateCache()) immediately after retrieval but before use. In practice,
+        //   this is only a concern during development when manually invalidating the cache,
+        //   and ModelContainer remains valid even after cache invalidation since it's only
+        //   the cached reference that's cleared, not the container itself.
         if !isStoredInMemoryOnly {
             containerLock.lock()
             let cached = cachedModelContainer

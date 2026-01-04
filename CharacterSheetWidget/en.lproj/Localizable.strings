@@ -3,6 +3,9 @@
   CharacterSheetWidget
   
   Localized strings for the Character Sheet Widget extension
+  
+  Note: String keys use snake_case naming convention for consistency with
+  standard localization practices, rather than Swift's camelCase convention.
 */
 
 /* Accessibility label for the character sheet widget image */
