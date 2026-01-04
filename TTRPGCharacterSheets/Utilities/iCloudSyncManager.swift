@@ -246,7 +246,11 @@ final class iCloudSyncManager: ObservableObject {
 // MARK: - App Configuration Extension
 extension iCloudSyncManager {
     /// Returns the appropriate ModelContainer based on user preferences
-    /// This method is safe to call during app initialization as it reads directly from UserDefaults
+    /// 
+    /// Note: This static method reads directly from UserDefaults instead of UserPreferences.shared
+    /// to avoid circular dependency issues during app initialization. The ModelContainer is created
+    /// before the app is fully initialized, so accessing UserPreferences singleton could fail.
+    /// Instance methods can safely use UserPreferences.shared as they run after app initialization.
     static func modelContainer() throws -> ModelContainer {
         // Read directly from UserDefaults to avoid dependency on UserPreferences singleton
         let iCloudEnabled = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled")
