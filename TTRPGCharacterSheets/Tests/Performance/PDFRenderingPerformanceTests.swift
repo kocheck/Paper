@@ -74,7 +74,7 @@ final class PDFRenderingPerformanceTests: XCTestCase {
             return
         }
 
-        let options = [XCTMeasureOptions.Default]
+        let options = XCTMeasureOptions()
         measure(metrics: [XCTClockMetric(), XCTMemoryMetric()], options: options) {
             // Simulate rendering at iPad resolution
             let bounds = CGRect(x: 0, y: 0, width: 1024, height: 1366)
@@ -108,17 +108,12 @@ final class PDFRenderingPerformanceTests: XCTestCase {
 
     func testPDFLoadingBaseline() throws {
         // Baseline: PDF loading should complete in < 100ms for typical 2-page character sheet
-        let baselineConstraint = XCTExpectedFailure.Options()
-        baselineConstraint.isStrict = false
-
-        XCTExpectFailure("Baseline may vary on CI", options: baselineConstraint)
-
         measure(metrics: [XCTClockMetric()]) {
             _ = PDFDocument(data: samplePDFData)
         }
 
-        // Assert baseline: < 0.1 seconds
-        // Note: Actual assertion would use XCTMetric thresholds in Xcode
+        // Note: Baseline thresholds can be configured in Xcode's test plan
+        // Target: < 0.1 seconds for 2-page character sheet
     }
 
     // MARK: - Helper Methods
