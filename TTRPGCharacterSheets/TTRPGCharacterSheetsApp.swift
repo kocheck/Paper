@@ -109,7 +109,7 @@ struct TTRPGCharacterSheetsApp: App {
                 let context = ModelContext(modelContainer)
                 let characters = try context.fetch(descriptor)
                 
-                if characters.first != nil {
+                if !characters.isEmpty {
                     // Character exists - proceed with restoration
                     StateRestorationManager.shared.characterToRestore = characterID
                     StateRestorationManager.shared.shouldRestoreState = true
