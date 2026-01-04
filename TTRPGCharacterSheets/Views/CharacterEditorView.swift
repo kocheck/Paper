@@ -15,6 +15,7 @@ struct CharacterEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var stateRestoration: StateRestorationManager
+    @StateObject private var preferences = UserPreferences.shared
 
     // MARK: - Properties
     @Bindable var character: Character
@@ -22,6 +23,7 @@ struct CharacterEditorView: View {
     // MARK: - State
     @State private var currentPageIndex: Int
     @State private var showingToolPicker = false
+    @State private var showingExportView = false
     @State private var pdfDocument: PDFDocument?
     @State private var hasUnsavedChanges = false
 
@@ -38,12 +40,24 @@ struct CharacterEditorView: View {
             ZStack {
                 if let pdfDoc = pdfDocument {
                     // Multi-page PDF + PencilKit view
-                    PagedPDFCanvasView(
-                        pdfDocument: pdfDoc,
-                        character: character,
-                        currentPageIndex: $currentPageIndex,
-                        hasUnsavedChanges: $hasUnsavedChanges
-                    )
+                    if preferences.pageTransitionStyle == .pageCurl {
+                        // Page curl animation
+                        PageCurlView(
+                            pdfDocument: pdfDoc,
+                            character: character,
+                            currentPageIndex: $currentPageIndex,
+                            hasUnsavedChanges: $hasUnsavedChanges
+                        )
+                        .ignoresSafeArea(edges: .bottom)
+                    } else {
+                        // Standard TabView
+                        PagedPDFCanvasView(
+                            pdfDocument: pdfDoc,
+                            character: character,
+                            currentPageIndex: $currentPageIndex,
+                            hasUnsavedChanges: $hasUnsavedChanges
+                        )
+                    }
                 } else {
                     // Loading state
                     ProgressView("Loading character sheet...")
@@ -66,6 +80,12 @@ struct CharacterEditorView: View {
                             Image(systemName: "circle.fill")
                                 .foregroundStyle(.orange)
                                 .imageScale(.small)
+                        }
+
+                        Button {
+                            showingExportView = true
+                        } label: {
+                            Label("Export", systemImage: "square.and.arrow.up")
                         }
 
                         Button {
@@ -103,6 +123,9 @@ struct CharacterEditorView: View {
             }
             .sheet(isPresented: $showingToolPicker) {
                 ToolPickerView()
+            }
+            .sheet(isPresented: $showingExportView) {
+                PDFExportView(character: character)
             }
             .onAppear {
                 loadPDF()

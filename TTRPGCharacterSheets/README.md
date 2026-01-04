@@ -8,6 +8,7 @@ This application serves as a digital library for TTRPG character sheets. Users c
 
 ## ✨ Key Features
 
+### Core Functionality
 - **PDF Template Management**: Import and organize PDF character sheet templates
 - **Character Instances**: Create multiple characters from a single template
 - **Apple Pencil Integration**: Natural drawing and writing experience using PencilKit
@@ -15,7 +16,13 @@ This application serves as a digital library for TTRPG character sheets. Users c
 - **Auto-Save**: Automatic saving of all drawings and annotations
 - **State Restoration**: Resume exactly where you left off, even after app termination
 - **Organized Library**: Grid-based character library with search and favorites
-- **Offline-First**: All data stored locally using SwiftData
+
+### Advanced Features (NEW!)
+- **PDF Export with Annotations**: Export your character sheets with all drawings baked into the PDF
+- **Custom Page Curl Animation**: Realistic book-turning effect using UIPageViewController
+- **iCloud Sync**: Synchronize characters across all your Apple devices (iPad & Mac)
+- **User Preferences**: Customize page transitions, drawing settings, and export options
+- **macOS Companion Ready**: Architecture supports future macOS app development
 
 ## 🏗️ Architecture
 

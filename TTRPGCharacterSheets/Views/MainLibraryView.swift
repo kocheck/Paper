@@ -24,6 +24,7 @@ struct MainLibraryView: View {
     @State private var showingCharacterEditor = false
     @State private var searchText = ""
     @State private var showingTemplateLibrary = false
+    @State private var showingSettings = false
 
     // MARK: - Grid Layout
     private let columns = [
@@ -54,6 +55,14 @@ struct MainLibraryView: View {
             }
             .navigationTitle("Character Library")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button {
+                        showingSettings = true
+                    } label: {
+                        Label("Settings", systemImage: "gearshape")
+                    }
+                }
+
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button {
                         showingTemplateLibrary = true
@@ -71,6 +80,9 @@ struct MainLibraryView: View {
             }
             .sheet(isPresented: $showingTemplateLibrary) {
                 TemplateLibraryView()
+            }
+            .sheet(isPresented: $showingSettings) {
+                SettingsView()
             }
             .fullScreenCover(item: $selectedCharacter) { character in
                 CharacterEditorView(character: character)
