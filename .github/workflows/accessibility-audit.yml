@@ -298,7 +298,7 @@ jobs:
             }
 
       - name: Fail if accessibility violations found
-        if: steps.ui_tests.conclusion == 'failure'
+        if: steps.ui_tests.outcome == 'failure'
         run: |
           echo "❌ Accessibility violations detected. Please review the accessibility report."
           exit 1
