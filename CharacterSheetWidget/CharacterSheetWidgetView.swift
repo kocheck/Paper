@@ -244,9 +244,13 @@ struct CharacterSheetWidget: Widget {
         .description("View your TTRPG character sheet at a glance")
         .supportedFamilies([.systemLarge, .systemExtraLarge])
         // Disable WidgetKit content margins so the provided character sheet snapshot can render
-        // edge-to-edge for systemLarge and systemExtraLarge widget families. The snapshot image
-        // itself must be generated with any required safe area insets and internal padding so that
-        // important content is not clipped when displayed without additional widget margins.
+        // edge-to-edge for systemLarge and systemExtraLarge widget families.
+        //
+        // Note: Neither this widget view nor WidgetImageRenderer applies any additional safe area
+        // insets or internal padding to the rendered images. The snapshot/PDF content itself must
+        // be authored or generated with any required safe area insets and internal padding so that
+        // important content is not clipped on devices with notches or rounded corners when
+        // displayed without additional widget margins.
         .contentMarginsDisabled()
     }
 }

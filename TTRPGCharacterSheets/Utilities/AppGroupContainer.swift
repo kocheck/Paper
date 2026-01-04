@@ -81,9 +81,16 @@ enum AppGroupContainer {
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
         // For non-memory containers, return cached instance if available
-        // Note: ModelContainer is thread-safe for concurrent read operations
-        // (multiple contexts can read simultaneously). The lock here only protects
-        // the cache variable itself, not the container's internal operations.
+        //
+        // Thread-safety notes:
+        // - ModelContainer is thread-safe for concurrent read operations (per Apple documentation).
+        //   Multiple contexts can read from the persistent store simultaneously without conflicts.
+        // - The NSLock here only protects access to the cachedModelContainer variable itself,
+        //   not the container's internal operations (which are already thread-safe).
+        // - Timeline providers may execute concurrently, but they all safely share the same
+        //   cached ModelContainer instance since read operations do not require exclusive access.
+        // - For write operations (which widgets should not perform), ModelContext handles
+        //   coordination internally via the container's persistent store coordinator.
         if !isStoredInMemoryOnly {
             containerLock.lock()
             let cached = cachedModelContainer
