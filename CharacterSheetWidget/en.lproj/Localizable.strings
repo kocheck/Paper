@@ -1,0 +1,15 @@
+/* 
+  Localizable.strings
+  CharacterSheetWidget
+  
+  Localized strings for the Character Sheet Widget extension
+*/
+
+/* Accessibility label for the character sheet widget image */
+"character_sheet_accessibility_label" = "Character sheet for %@";
+
+/* Accessibility hint for opening the character in the app from the widget */
+"character_sheet_accessibility_hint" = "Tap to open %@ in the app";
+
+/* Accessibility hint for empty widget state */
+"widget_empty_state_accessibility_hint" = "Open the TTRPG Character Sheets app to view a character in this widget";

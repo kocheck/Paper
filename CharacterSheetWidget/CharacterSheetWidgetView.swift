@@ -45,8 +45,20 @@ struct CharacterSheetWidgetView: View {
                         .aspectRatio(contentMode: .fill)
                         .frame(width: geometry.size.width, height: geometry.size.height)
                         .clipped()
-                        .accessibilityLabel("Character sheet for \(entry.characterName)")
-                        .accessibilityHint("Tap to open \(entry.characterName) in the app")
+                        .accessibilityLabel(String(
+                            format: NSLocalizedString(
+                                "character_sheet_accessibility_label",
+                                comment: "Accessibility label for the character sheet widget image"
+                            ),
+                            entry.characterName
+                        ))
+                        .accessibilityHint(String(
+                            format: NSLocalizedString(
+                                "character_sheet_accessibility_hint",
+                                comment: "Accessibility hint for opening the character in the app from the widget"
+                            ),
+                            entry.characterName
+                        ))
                 } else {
                     // Fallback placeholder
                     placeholderView
@@ -115,7 +127,10 @@ struct CharacterSheetWidgetView: View {
         .padding()
         .accessibilityElement(children: .combine)
         .accessibilityLabel("No character selected")
-        .accessibilityHint("Open the TTRPG Character Sheets app to view a character in this widget")
+        .accessibilityHint(NSLocalizedString(
+            "widget_empty_state_accessibility_hint",
+            comment: "Accessibility hint for empty widget state"
+        ))
     }
 
     // MARK: - Placeholder

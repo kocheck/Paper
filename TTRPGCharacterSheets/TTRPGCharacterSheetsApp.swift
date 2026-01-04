@@ -90,11 +90,41 @@ struct TTRPGCharacterSheetsApp: App {
 
         print("✅ Opening character: \(characterID)")
 
-        // Update state restoration manager to open this character
+        // Validate that the character exists before setting it for restoration
         // Dispatch to main thread since StateRestorationManager has @Published properties
         Task { @MainActor in
-            StateRestorationManager.shared.characterToRestore = characterID
-            StateRestorationManager.shared.shouldRestoreState = true
+            if Task.isCancelled {
+                print("⚠️ State restoration task was cancelled before updating for character: \(characterID)")
+                return
+            }
+            
+            // Check if character exists in the database
+            let descriptor = FetchDescriptor<Character>(
+                predicate: #Predicate { character in
+                    character.id == characterID
+                }
+            )
+            
+            do {
+                let context = ModelContext(modelContainer)
+                let characters = try context.fetch(descriptor)
+                
+                if !characters.isEmpty {
+                    // Character exists - proceed with restoration
+                    StateRestorationManager.shared.characterToRestore = characterID
+                    StateRestorationManager.shared.shouldRestoreState = true
+                    print("✅ Character found, state restoration enabled")
+                    
+                    // Verify that the state was updated as expected for debugging/monitoring
+                    if StateRestorationManager.shared.characterToRestore != characterID {
+                        print("⚠️ StateRestorationManager failed to update characterToRestore to \(characterID)")
+                    }
+                } else {
+                    print("⚠️ Character \(characterID) not found in database, skipping restoration")
+                }
+            } catch {
+                print("❌ Failed to validate character existence: \(error)")
+            }
         }
     }
 }
@@ -121,7 +151,10 @@ class StateRestorationManager: ObservableObject {
 
     /// Loads the restoration state from shared UserDefaults
     func loadRestorationState() {
-        guard let defaults = sharedDefaults else { return }
+        guard let defaults = sharedDefaults else {
+            print("⚠️ StateRestorationManager: sharedDefaults is nil - App Groups may not be configured properly")
+            return
+        }
 
         if let characterIDString = defaults.string(forKey: "lastViewedCharacterID"),
            let characterID = UUID(uuidString: characterIDString) {
@@ -133,7 +166,10 @@ class StateRestorationManager: ObservableObject {
 
     /// Saves the current state for restoration (accessible by widget)
     func saveState(characterID: UUID, pageIndex: Int) {
-        guard let defaults = sharedDefaults else { return }
+        guard let defaults = sharedDefaults else {
+            print("⚠️ StateRestorationManager.saveState: sharedDefaults is nil - App Groups may not be configured properly")
+            return
+        }
 
         defaults.set(characterID.uuidString, forKey: "lastViewedCharacterID")
         defaults.set(pageIndex, forKey: "lastViewedPageIndex")
@@ -141,7 +177,10 @@ class StateRestorationManager: ObservableObject {
 
     /// Clears the restoration state
     func clearState() {
-        guard let defaults = sharedDefaults else { return }
+        guard let defaults = sharedDefaults else {
+            print("⚠️ StateRestorationManager.clearState: sharedDefaults is nil - App Groups may not be configured properly")
+            return
+        }
 
         defaults.removeObject(forKey: "lastViewedCharacterID")
         defaults.removeObject(forKey: "lastViewedPageIndex")

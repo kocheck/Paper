@@ -40,7 +40,15 @@ struct CharacterEntity: AppEntity {
 /// Query provider for character entities
 struct CharacterEntityQuery: EntityQuery {
     
-    /// Shared schema for all queries to enable container caching
+    /// Shared schema for all SwiftData access in this file.
+    /// 
+    /// This schema is reused by `CharacterEntityQuery` and `CharacterOptionsProvider`
+    /// so that all widget-related queries use an identical schema and can benefit from
+    /// container caching in `AppGroupContainer`.
+    /// 
+    /// **Access Level:** Marked as `fileprivate` to keep the schema internal to this file
+    /// while still allowing all types declared here to reference the same constant instead
+    /// of duplicating schema definitions.
     fileprivate static let schema = Schema([Template.self, Character.self, PageDrawing.self])
     
     func entities(for identifiers: [UUID]) async throws -> [CharacterEntity] {

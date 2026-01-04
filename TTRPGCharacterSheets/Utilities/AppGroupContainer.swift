@@ -16,8 +16,24 @@ enum AppGroupContainer {
 
     /// Cached shared ModelContainer for widget use
     /// This reduces overhead from repeatedly creating containers
+    /// 
+    /// **Cache Invalidation:**
+    /// The cache persists for the lifetime of the app/extension process. If the schema
+    /// changes or the container needs to be recreated, the app/extension must be restarted.
+    /// For development, force-quit the app and widget extension. For production, this happens
+    /// automatically during app updates.
     private static var cachedModelContainer: ModelContainer?
     private static let containerLock = NSLock()
+    
+    /// Invalidates the cached ModelContainer
+    /// 
+    /// **Warning:** Only call this if you need to recreate the container (e.g., after schema changes
+    /// during development). The next call to `createModelContainer` will create a fresh instance.
+    static func invalidateCache() {
+        containerLock.lock()
+        defer { containerLock.unlock() }
+        cachedModelContainer = nil
+    }
 
     /// Shared container URL for the App Group
     /// - Returns: URL to the shared container directory
