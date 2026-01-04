@@ -111,15 +111,14 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
         configuration: SelectCharacterIntent,
         context: Context
     ) async -> CharacterSheetEntry {
-        // Create model container (uses cached instance via AppGroupContainer)
-        // The container caching in AppGroupContainer reduces overhead from
-        // repeated container creation across timeline updates and intent queries
+        // Create or reuse cached model container from AppGroupContainer
+        // After the first creation, AppGroupContainer returns the cached instance to reduce overhead
         guard let modelContainer = try? AppGroupContainer.createModelContainer(
             schema: Schema([Template.self, Character.self, PageDrawing.self]),
             isStoredInMemoryOnly: false
         ) else {
             WidgetLogger.error("Failed to create model container")
-            return createErrorEntry(configuration: configuration)
+            return createErrorEntry(configuration: configuration, characterID: characterID)
         }
 
         let modelContext = ModelContext(modelContainer)
@@ -136,18 +135,23 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
 
             guard let character = characters.first else {
                 WidgetLogger.error("Character not found for ID: \(characterID.uuidString)")
-                return createErrorEntry(configuration: configuration)
+                return createErrorEntry(configuration: configuration, characterID: characterID)
             }
 
             // Get the template
             guard let template = character.template else {
                 WidgetLogger.error("Character has no template")
-                return createErrorEntry(configuration: configuration)
+                return createErrorEntry(configuration: configuration, characterID: characterID)
             }
 
-            // Get the first page drawing (page index 0) from the character's drawings
-            // This is more efficient than a separate query since we already have the character
-            let pageDrawing = character.pageDrawings.first(where: { $0.pageIndex == 0 })
+            // Get the first page drawing (page index 0) using a targeted fetch
+            // This is more efficient than loading all pageDrawings into memory
+            let pageDrawingDescriptor = FetchDescriptor<PageDrawing>(
+                predicate: #Predicate { pageDrawing in
+                    pageDrawing.character?.id == characterID && pageDrawing.pageIndex == 0
+                }
+            )
+            let pageDrawing = try modelContext.fetch(pageDrawingDescriptor).first
 
             // Render the character sheet image
             // Choose render configuration based on widget size
@@ -184,7 +188,7 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
 
         } catch {
             WidgetLogger.error("Failed to fetch character", error: error)
-            return createErrorEntry(configuration: configuration)
+            return createErrorEntry(configuration: configuration, characterID: characterID)
         }
     }
 
@@ -199,10 +203,15 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
         return id
     }
 
-    private func createErrorEntry(configuration: SelectCharacterIntent) -> CharacterSheetEntry {
-        CharacterSheetEntry(
+    private func createErrorEntry(configuration: SelectCharacterIntent, characterID: UUID? = nil) -> CharacterSheetEntry {
+        // Include characterID even when loading fails to aid in debugging
+        if let characterID = characterID {
+            WidgetLogger.error("Failed to load character \(characterID.uuidString)")
+        }
+        
+        return CharacterSheetEntry(
             date: Date(),
-            characterID: nil,
+            characterID: characterID,  // Preserve characterID for debugging
             characterName: "Error",
             templateName: "Unable to load character",
             snapshotImage: WidgetImageRenderer.generatePlaceholderImage(),
