@@ -28,6 +28,8 @@ final class CharacterEditorViewModel {
     var showingToolPicker = false
     var showingExportView = false
     var isLoading = true
+    
+    // Error handling state (automatically observed via @Observable)
     var saveErrorMessage: String?
     var showingSaveError = false
 
