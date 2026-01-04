@@ -71,17 +71,21 @@ final class DrawingSaveLoadPerformanceTests: XCTestCase {
         let character = Character(name: "Test Character", template: template)
         modelContext.insert(character)
 
-        let pageDrawing = PageDrawing(pageIndex: 0)
-        pageDrawing.drawing = createComplexDrawing(strokeCount: 50)
-        pageDrawing.character = character
-        modelContext.insert(pageDrawing)
-
         measure {
+            // Create fresh drawing data for each iteration
+            let pageDrawing = PageDrawing(pageIndex: Int.random(in: 0..<100))
+            pageDrawing.drawing = createComplexDrawing(strokeCount: 50)
+            pageDrawing.character = character
+            modelContext.insert(pageDrawing)
+
             do {
                 try modelContext.save()
             } catch {
                 XCTFail("Failed to save: \(error)")
             }
+
+            // Clean up for next iteration
+            modelContext.delete(pageDrawing)
         }
     }
 
