@@ -1,0 +1,199 @@
+//
+//  CharacterSheetTimelineProvider.swift
+//  CharacterSheetWidget
+//
+//  Timeline provider for character sheet widget
+//
+
+import WidgetKit
+import SwiftUI
+import SwiftData
+import AppIntents
+
+/// Timeline entry for character sheet widget
+struct CharacterSheetEntry: TimelineEntry {
+    let date: Date
+    let characterID: UUID?
+    let characterName: String
+    let templateName: String
+    let snapshotImage: UIImage?
+    let configuration: SelectCharacterIntent
+}
+
+/// Timeline provider that fetches character data for the widget
+struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
+    typealias Entry = CharacterSheetEntry
+    typealias Intent = SelectCharacterIntent
+
+    // MARK: - Placeholder
+
+    func placeholder(in context: Context) -> CharacterSheetEntry {
+        CharacterSheetEntry(
+            date: Date(),
+            characterID: nil,
+            characterName: "Character Name",
+            templateName: "D&D 5E",
+            snapshotImage: WidgetImageRenderer.generatePlaceholderImage(),
+            configuration: SelectCharacterIntent()
+        )
+    }
+
+    // MARK: - Snapshot
+
+    func snapshot(for configuration: SelectCharacterIntent, in context: Context) async -> CharacterSheetEntry {
+        if context.isPreview {
+            return placeholder(in: context)
+        }
+
+        return await fetchCharacterEntry(for: configuration, in: context)
+    }
+
+    // MARK: - Timeline
+
+    func timeline(for configuration: SelectCharacterIntent, in context: Context) async -> Timeline<CharacterSheetEntry> {
+        let entry = await fetchCharacterEntry(for: configuration, in: context)
+
+        // Update timeline every 15 minutes
+        // This allows the widget to refresh if the user modifies the character
+        let nextUpdate = Calendar.current.date(byAdding: .minute, value: 15, to: Date()) ?? Date()
+
+        return Timeline(entries: [entry], policy: .after(nextUpdate))
+    }
+
+    // MARK: - Data Fetching
+
+    private func fetchCharacterEntry(
+        for configuration: SelectCharacterIntent,
+        in context: Context
+    ) async -> CharacterSheetEntry {
+        // Determine which character to display
+        let characterID: UUID?
+
+        if configuration.showLastViewed {
+            // Get last viewed character from shared UserDefaults
+            characterID = getLastViewedCharacterID()
+        } else if let selectedCharacter = configuration.character {
+            // Use explicitly selected character
+            characterID = selectedCharacter.id
+        } else {
+            // Fallback to last viewed
+            characterID = getLastViewedCharacterID()
+        }
+
+        guard let characterID = characterID else {
+            // No character available - return placeholder
+            return CharacterSheetEntry(
+                date: Date(),
+                characterID: nil,
+                characterName: "No Character",
+                templateName: "Select a character",
+                snapshotImage: WidgetImageRenderer.generatePlaceholderImage(),
+                configuration: configuration
+            )
+        }
+
+        // Fetch character data from SwiftData
+        return await fetchCharacterData(characterID: characterID, configuration: configuration, context: context)
+    }
+
+    private func fetchCharacterData(
+        characterID: UUID,
+        configuration: SelectCharacterIntent,
+        context: Context
+    ) async -> CharacterSheetEntry {
+        // Create model container
+        guard let modelContainer = try? AppGroupContainer.createModelContainer(
+            schema: Schema([Template.self, Character.self, PageDrawing.self]),
+            isStoredInMemoryOnly: false
+        ) else {
+            print("❌ Failed to create model container")
+            return createErrorEntry(configuration: configuration)
+        }
+
+        let modelContext = ModelContext(modelContainer)
+
+        // Fetch the character
+        let descriptor = FetchDescriptor<Character>(
+            predicate: #Predicate { character in
+                character.id == characterID
+            }
+        )
+
+        do {
+            let characters = try modelContext.fetch(descriptor)
+
+            guard let character = characters.first else {
+                print("❌ Character not found")
+                return createErrorEntry(configuration: configuration)
+            }
+
+            // Get the template
+            guard let template = character.template else {
+                print("❌ Character has no template")
+                return createErrorEntry(configuration: configuration)
+            }
+
+            // Get the first page drawing (page index 0)
+            let pageDrawing = character.pageDrawings.first { $0.pageIndex == 0 }
+
+            // Render the character sheet image
+            let renderConfig: WidgetImageRenderer.RenderConfiguration
+
+            // Choose render configuration based on widget size
+            switch context.family {
+            case .systemLarge:
+                renderConfig = .widgetLarge
+            case .systemExtraLarge:
+                renderConfig = WidgetImageRenderer.RenderConfiguration(
+                    targetSize: CGSize(width: 1000, height: 1300),
+                    scale: UIScreen.main.scale,
+                    compressionQuality: 0.85,
+                    cropToContent: false
+                )
+            default:
+                renderConfig = .widgetDefault
+            }
+
+            let snapshotImage = WidgetImageRenderer.renderCharacterSheetImage(
+                pdfData: template.pdfData,
+                pageIndex: 0,
+                drawingData: pageDrawing?.drawingData
+            )
+
+            return CharacterSheetEntry(
+                date: Date(),
+                characterID: character.id,
+                characterName: character.name,
+                templateName: template.name,
+                snapshotImage: snapshotImage ?? WidgetImageRenderer.generatePlaceholderImage(),
+                configuration: configuration
+            )
+
+        } catch {
+            print("❌ Failed to fetch character: \(error)")
+            return createErrorEntry(configuration: configuration)
+        }
+    }
+
+    // MARK: - Helper Methods
+
+    private func getLastViewedCharacterID() -> UUID? {
+        guard let defaults = UserDefaults(suiteName: AppGroupContainer.identifier),
+              let idString = defaults.string(forKey: "lastViewedCharacterID"),
+              let id = UUID(uuidString: idString) else {
+            return nil
+        }
+        return id
+    }
+
+    private func createErrorEntry(configuration: SelectCharacterIntent) -> CharacterSheetEntry {
+        CharacterSheetEntry(
+            date: Date(),
+            characterID: nil,
+            characterName: "Error",
+            templateName: "Unable to load character",
+            snapshotImage: WidgetImageRenderer.generatePlaceholderImage(),
+            configuration: configuration
+        )
+    }
+}
