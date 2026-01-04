@@ -236,7 +236,7 @@ custom_rules:
   # Ensure MARK comments are properly formatted
   mark_formatting:
     name: "MARK Formatting"
-    regex: '\/\/\s*MARK:(?!\s*-\s)'
+    regex: '\/\/\s*MARK:(?!\s*-)'
     message: "MARK comments should follow format: // MARK: - Description"
     severity: warning
 

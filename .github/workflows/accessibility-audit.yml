@@ -149,10 +149,10 @@ jobs:
 
           # Count accessibility violations
           if [ -f ui_test_output.log ]; then
-            MISSING_LABELS=$(grep -c "missing accessibility label" ui_test_output.log)
-            MISSING_TRAITS=$(grep -c "missing accessibility trait" ui_test_output.log)
-            CONTRAST_ISSUES=$(grep -c "insufficient contrast" ui_test_output.log)
-            TOUCH_TARGET_ISSUES=$(grep -c "touch target too small" ui_test_output.log)
+            MISSING_LABELS=$(grep -c "missing accessibility label" ui_test_output.log || echo "0")
+            MISSING_TRAITS=$(grep -c "missing accessibility trait" ui_test_output.log || echo "0")
+            CONTRAST_ISSUES=$(grep -c "insufficient contrast" ui_test_output.log || echo "0")
+            TOUCH_TARGET_ISSUES=$(grep -c "touch target too small" ui_test_output.log || echo "0")
           else
             echo "_Note: ui_test_output.log not found; assuming 0 accessibility violations._" >> accessibility-summary.md
             MISSING_LABELS=0
