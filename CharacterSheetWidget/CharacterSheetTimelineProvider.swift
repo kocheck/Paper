@@ -133,13 +133,9 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
                 return createErrorEntry(configuration: configuration)
             }
 
-            // Fetch only the first page drawing (page index 0) to reduce memory usage
-            let pageDrawingDescriptor = FetchDescriptor<PageDrawing>(
-                predicate: #Predicate { drawing in
-                    drawing.character?.id == characterID && drawing.pageIndex == 0
-                }
-            )
-            let pageDrawing = try? modelContext.fetch(pageDrawingDescriptor).first
+            // Get the first page drawing (page index 0) from the character's drawings
+            // This is more efficient than a separate query since we already have the character
+            let pageDrawing = character.pageDrawings.first(where: { $0.pageIndex == 0 })
 
             // Render the character sheet image
             // Choose render configuration based on widget size
