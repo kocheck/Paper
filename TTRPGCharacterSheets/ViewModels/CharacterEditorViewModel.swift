@@ -28,12 +28,17 @@ final class CharacterEditorViewModel {
     var showingToolPicker = false
     var showingExportView = false
     var isLoading = true
+    
+    // Error handling state (automatically observed via @Observable)
+    var saveErrorMessage: String?
+    var showingSaveError = false
 
     // MARK: - Undo/Redo State
 
     var canUndo = false
     var canRedo = false
     private(set) var currentUndoManager: UndoManager?
+    private var undoObservers: [NSObjectProtocol] = []
 
     // MARK: - Dependencies
 
@@ -55,6 +60,13 @@ final class CharacterEditorViewModel {
         self.stateRestoration = stateRestoration
         self.preferences = preferences
         self.currentPageIndex = character.lastViewedPageIndex
+    }
+
+    deinit {
+        // Remove all NotificationCenter observers to prevent memory leaks
+        for observer in undoObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     // MARK: - Public Methods
@@ -157,8 +169,8 @@ final class CharacterEditorViewModel {
             hasUnsavedChanges = false
             onDismiss()
         } catch {
-            print("❌ Failed to save character: \(error)")
-            // In production, would show error alert
+            saveErrorMessage = "Failed to save character: \(error.localizedDescription)"
+            showingSaveError = true
         }
     }
 
@@ -172,34 +184,43 @@ final class CharacterEditorViewModel {
     /// Register an undo manager (typically from PKCanvasView)
     /// - Parameter undoManager: The undo manager to register
     func registerUndoManager(_ undoManager: UndoManager?) {
+        // Remove previous observers if re-registering
+        for observer in undoObservers {
+            NotificationCenter.default.removeObserver(observer)
+        }
+        undoObservers.removeAll()
+
         currentUndoManager = undoManager
         updateUndoRedoState()
 
         // Observe undo manager changes
         if let undoManager = undoManager {
-            NotificationCenter.default.addObserver(
+            let didUndoObserver = NotificationCenter.default.addObserver(
                 forName: .NSUndoManagerDidUndoChange,
                 object: undoManager,
                 queue: .main
             ) { [weak self] _ in
                 self?.updateUndoRedoState()
             }
+            undoObservers.append(didUndoObserver)
 
-            NotificationCenter.default.addObserver(
+            let didRedoObserver = NotificationCenter.default.addObserver(
                 forName: .NSUndoManagerDidRedoChange,
                 object: undoManager,
                 queue: .main
             ) { [weak self] _ in
                 self?.updateUndoRedoState()
             }
+            undoObservers.append(didRedoObserver)
 
-            NotificationCenter.default.addObserver(
+            let didCloseGroupObserver = NotificationCenter.default.addObserver(
                 forName: .NSUndoManagerDidCloseUndoGroup,
                 object: undoManager,
                 queue: .main
             ) { [weak self] _ in
                 self?.updateUndoRedoState()
             }
+            undoObservers.append(didCloseGroupObserver)
         }
     }
 
@@ -207,14 +228,12 @@ final class CharacterEditorViewModel {
     func undo() {
         currentUndoManager?.undo()
         updateUndoRedoState()
-        markDrawingChanged()
     }
 
     /// Perform redo
     func redo() {
         currentUndoManager?.redo()
         updateUndoRedoState()
-        markDrawingChanged()
     }
 
     /// Update undo/redo button states

@@ -120,6 +120,8 @@ struct CharacterEditorView: View {
                     }
                     .disabled(!vm.canUndo)
                     .keyboardShortcut("z", modifiers: .command)
+                    .accessibilityLabel(vm.canUndo ? "Undo" : "Undo (no actions available)")
+                    .accessibilityHint(vm.canUndo ? "Double tap to undo the last action" : "")
 
                     Button {
                         vm.redo()
@@ -128,6 +130,8 @@ struct CharacterEditorView: View {
                     }
                     .disabled(!vm.canRedo)
                     .keyboardShortcut("z", modifiers: [.command, .shift])
+                    .accessibilityLabel(vm.canRedo ? "Redo" : "Redo (no actions available)")
+                    .accessibilityHint(vm.canRedo ? "Double tap to redo the last undone action" : "")
 
                     Button {
                         vm.showExportView()
@@ -183,6 +187,16 @@ struct CharacterEditorView: View {
             set: { if !$0 { vm.hideExportView() } }
         )) {
             PDFExportView(character: character)
+        }
+        .alert("Save Error", isPresented: Binding(
+            get: { vm.showingSaveError },
+            set: { if !$0 { vm.showingSaveError = false } }
+        )) {
+            // Empty action - alert dismissal is automatically handled by the isPresented binding
+            // When the user taps OK, SwiftUI sets isPresented to false, which triggers the setter above
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(vm.saveErrorMessage ?? "An unknown error occurred while saving.")
         }
     }
 

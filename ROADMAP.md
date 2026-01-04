@@ -10,10 +10,10 @@
 
 This roadmap documents planned improvements for the TTRPG Character Sheets iPad application. Each task is structured with sufficient context for AI agents or developers to implement independently.
 
-**Priority Items (In Progress):**
-- ✅ Performance Benchmarking Suite
-- ✅ ViewModel Architecture Extraction
-- ✅ Undo/Redo Functionality
+**Completed Improvements:**
+- ✅ Performance Benchmarking Suite (2026-01-04)
+- ✅ ViewModel Architecture Extraction (2026-01-04)
+- ✅ Undo/Redo Functionality (2026-01-04)
 
 **Backlog Items:** 6 tasks organized by category
 
