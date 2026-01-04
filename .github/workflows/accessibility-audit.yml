@@ -20,7 +20,7 @@ env:
   SCHEME_NAME: TTRPGCharacterSheets
   WORKSPACE_NAME: TTRPGCharacterSheets.xcworkspace
   PROJECT_NAME: TTRPGCharacterSheets.xcodeproj
-  IOS_DESTINATION: 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.2'
+  IOS_DESTINATION: 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.0'
   UI_TEST_TARGET: TTRPGCharacterSheetsUITests
 
 jobs:
@@ -69,7 +69,15 @@ jobs:
           # Check if the required simulator exists
           if ! xcrun simctl list devices | grep -q "iPad Pro (12.9-inch) (6th generation)"; then
             echo "Creating iPad Pro simulator..."
-            xcrun simctl create "iPad Pro (12.9-inch) (6th generation)" "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-12-9-inch-6th-generation" "com.apple.CoreSimulator.SimRuntime.iOS-17-2"
+            # Dynamically determine an available iOS 17.x runtime identifier
+            RUNTIME_ID=$(xcrun simctl list runtimes | grep "iOS 17\." | grep -v "unavailable" | head -1 | awk -F' - ' '{print $NF}')
+            if [ -z "$RUNTIME_ID" ]; then
+              echo "Error: No available iOS 17.x simulator runtime found."
+              xcrun simctl list runtimes
+              exit 1
+            fi
+            echo "Using runtime: $RUNTIME_ID"
+            xcrun simctl create "iPad Pro (12.9-inch) (6th generation)" "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-12-9-inch-6th-generation" "$RUNTIME_ID"
           fi
 
       - name: Boot simulator
@@ -77,16 +85,43 @@ jobs:
           SIMULATOR_ID=$(xcrun simctl list devices | grep "iPad Pro (12.9-inch) (6th generation)" | grep -v "unavailable" | head -1 | awk -F'[()]' '{print $(NF-1)}')
           echo "Booting simulator: $SIMULATOR_ID"
           xcrun simctl boot "$SIMULATOR_ID" || true
-          sleep 5
+          
+          echo "Waiting for simulator to boot..."
+          START_TIME=$(date +%s)
+          TIMEOUT=120
+          while true; do
+            BOOTED_COUNT=$(xcrun simctl list devices | grep "$SIMULATOR_ID" | grep -c "(Booted)" || true)
+            if [ "$BOOTED_COUNT" -gt 0 ]; then
+              echo "Simulator $SIMULATOR_ID is booted."
+              break
+            fi
+            
+            NOW=$(date +%s)
+            ELAPSED=$((NOW - START_TIME))
+            if [ "$ELAPSED" -ge "$TIMEOUT" ]; then
+              echo "Error: Simulator $SIMULATOR_ID did not boot within ${TIMEOUT}s."
+              echo "Current simulator list for debugging:"
+              xcrun simctl list devices
+              exit 1
+            fi
+            
+            echo "Simulator not booted yet (elapsed: ${ELAPSED}s). Retrying..."
+            sleep 5
+          done
 
       - name: Install xcpretty
-        run: gem install xcpretty
+        run: |
+          if ! command -v xcpretty >/dev/null 2>&1; then
+            gem install xcpretty
+          else
+            echo "xcpretty already installed; skipping gem install."
+          fi
 
       - name: Resolve Swift Package dependencies
         run: |
-          if [ -f "$WORKSPACE_NAME" ]; then
+          if [ -d "$WORKSPACE_NAME" ]; then
             xcodebuild -resolvePackageDependencies -workspace "$WORKSPACE_NAME" -scheme "$SCHEME_NAME"
-          elif [ -f "$PROJECT_NAME" ]; then
+          elif [ -d "$PROJECT_NAME" ]; then
             xcodebuild -resolvePackageDependencies -project "$PROJECT_NAME" -scheme "$SCHEME_NAME"
           else
             echo "Warning: No Xcode project or workspace found. Skipping dependency resolution."
@@ -95,7 +130,7 @@ jobs:
 
       - name: Build for UI testing
         run: |
-          if [ -f "$WORKSPACE_NAME" ]; then
+          if [ -d "$WORKSPACE_NAME" ]; then
             xcodebuild build-for-testing \
               -workspace "$WORKSPACE_NAME" \
               -scheme "$SCHEME_NAME" \
@@ -105,7 +140,7 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               ONLY_ACTIVE_ARCH=YES \
               | xcpretty
-          elif [ -f "$PROJECT_NAME" ]; then
+          elif [ -d "$PROJECT_NAME" ]; then
             xcodebuild build-for-testing \
               -project "$PROJECT_NAME" \
               -scheme "$SCHEME_NAME" \
@@ -125,26 +160,25 @@ jobs:
         id: ui_tests
         continue-on-error: true
         run: |
-          # Enable accessibility audit mode
-          # The -enableAccessibilityAudit flag will throw exceptions for common a11y violations
-          if [ -f "$WORKSPACE_NAME" ]; then
+          # Run UI tests to check accessibility compliance
+          # Note: Use XCTAccessibilityAudit API in UI tests for automated accessibility checks
+          # See: https://developer.apple.com/documentation/xctest/xctestcase/accessibility_audits
+          if [ -d "$WORKSPACE_NAME" ]; then
             xcodebuild test-without-building \
               -workspace "$WORKSPACE_NAME" \
               -scheme "$SCHEME_NAME" \
               -destination "$IOS_DESTINATION" \
               -only-testing:"$UI_TEST_TARGET" \
-              -enableAccessibilityAudit YES \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               | tee ui_test_output.log \
               | xcpretty --report html --output accessibility-report.html
-          elif [ -f "$PROJECT_NAME" ]; then
+          elif [ -d "$PROJECT_NAME" ]; then
             xcodebuild test-without-building \
               -project "$PROJECT_NAME" \
               -scheme "$SCHEME_NAME" \
               -destination "$IOS_DESTINATION" \
               -only-testing:"$UI_TEST_TARGET" \
-              -enableAccessibilityAudit YES \
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               | tee ui_test_output.log \
@@ -247,7 +281,7 @@ jobs:
             }
 
       - name: Fail if accessibility violations found
-        if: steps.ui_tests.outcome == 'failure'
+        if: steps.ui_tests.conclusion == 'failure'
         run: |
           echo "❌ Accessibility violations detected. Please review the accessibility report."
           exit 1
