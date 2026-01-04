@@ -48,6 +48,48 @@ The app follows the MVVM architecture pattern, which provides clear separation o
 - **SwiftUI Integration**: Natural fit with SwiftUI's reactive paradigm
 - **Maintainability**: Changes in one layer don't cascade to others
 
+### ViewModels
+
+#### CharacterEditorViewModel
+
+The `CharacterEditorViewModel` manages the state and business logic for the character editor:
+
+```swift
+@MainActor
+@Observable
+final class CharacterEditorViewModel {
+    // State
+    var currentPageIndex: Int
+    var pdfDocument: PDFDocument?
+    var hasUnsavedChanges: Bool
+    var canUndo: Bool
+    var canRedo: Bool
+
+    // Actions
+    func loadPDF()
+    func navigateToPage(_ index: Int) -> Bool
+    func undo()
+    func redo()
+    func saveAndDismiss(onDismiss: () -> Void)
+}
+```
+
+**Key Features:**
+- **Page Navigation**: Centralized page index management with validation
+- **Undo/Redo**: Integration with PencilKit's UndoManager
+- **State Restoration**: Automatic saving of last viewed page
+- **PDF Loading**: Asynchronous PDF document initialization
+- **Dependency Injection**: Accepts dependencies for testability
+
+**Environment Injection:**
+```swift
+// Inject into environment
+.environment(\.characterEditorViewModel, viewModel)
+
+// Access in child views
+@Environment(\.characterEditorViewModel) private var viewModel
+```
+
 ---
 
 ## Data Layer
@@ -372,12 +414,17 @@ TTRPGCharacterSheets/
 │   ├── MainLibraryView.swift
 │   ├── CharacterEditorView.swift
 │   └── ...
-├── ViewModels/                # Business logic (future)
+├── ViewModels/                # Business logic layer
+│   └── CharacterEditorViewModel.swift
 ├── Utilities/                 # Helpers & extensions
 ├── Resources/                 # Assets
 └── Tests/
     ├── Unit/                  # Model tests
-    └── UI/                    # Flow tests
+    ├── UI/                    # Flow tests
+    └── Performance/           # Performance benchmarks
+        ├── PDFRenderingPerformanceTests.swift
+        ├── DrawingSaveLoadPerformanceTests.swift
+        └── PaginationPerformanceTests.swift
 ```
 
 ### File Naming Conventions
@@ -388,30 +435,95 @@ TTRPGCharacterSheets/
 
 ---
 
-## Future Architectural Enhancements
+## Testing Strategy
 
-### Planned Improvements
+### Test Categories
 
-1. **Dependency Injection**
-   - Inject ModelContext instead of @Environment
-   - Better testability
+1. **Unit Tests** (`Tests/Unit/`)
+   - Model validation and relationships
+   - Business logic in ViewModels
+   - Data transformation utilities
+   - Coverage: ~85% of models and ViewModels
+
+2. **UI Tests** (`Tests/UI/`)
+   - User flow validation
+   - State restoration verification
+   - Navigation and gestures
+   - Accessibility compliance
+
+3. **Performance Tests** (`Tests/Performance/`)
+   - PDF rendering benchmarks
+   - Drawing save/load performance
+   - Pagination and navigation speed
+   - Memory usage profiling
+
+**Performance Baselines:**
+- PDF load (2-page sheet): < 100ms
+- Drawing save (50 strokes): < 50ms
+- Page navigation: < 16ms (60 FPS target)
+
+### Performance Testing Infrastructure
+
+Performance tests use XCTest metrics to track regressions:
+
+```swift
+func testPDFRenderingPerformance() throws {
+    measure(metrics: [XCTClockMetric(), XCTMemoryMetric()]) {
+        _ = PDFDocument(data: samplePDFData)
+    }
+}
+```
+
+**CI/CD Integration:**
+- Automated on every PR (`.github/workflows/pr-quality.yml`)
+- Fails PR if performance regresses > 20%
+- Tracks trends over time
+
+---
+
+## Recent Architectural Enhancements
+
+### ✅ Completed Improvements
+
+1. **ViewModels** (2026-01-04)
+   - ✅ CharacterEditorViewModel implemented
+   - ✅ Extracted business logic from views
+   - ✅ Environment-based injection pattern
+   - ✅ Improved testability
+
+2. **Undo/Redo System** (2026-01-04)
+   - ✅ Integration with PencilKit UndoManager
+   - ✅ Keyboard shortcuts (⌘Z, ⌘⇧Z)
+   - ✅ Toolbar buttons with state management
+   - ✅ Per-page undo stack preservation
+
+3. **Performance Testing** (2026-01-04)
+   - ✅ Comprehensive benchmark suite
+   - ✅ PDF rendering, drawing, pagination tests
+   - ✅ CI/CD integration
+   - ✅ Baseline tracking
+
+### Future Architectural Enhancements
+
+#### Planned Improvements
+
+1. **Dependency Injection Container**
+   - Protocol abstractions for services
+   - Mock implementations for testing
+   - See: `ROADMAP.md#CODE-001`
 
 2. **Repository Layer**
    - Abstract SwiftData behind protocols
    - Easier to swap persistence layer
 
-3. **ViewModels**
-   - Extract complex logic from views
-   - Improve testability
-
-4. **Coordinator Pattern**
+3. **Coordinator Pattern**
    - Navigation coordinator
    - Decouple navigation from views
 
-5. **Service Layer**
-   - PDF processing service
-   - Thumbnail generation service
-   - Export service
+4. **Service Layer Refactoring**
+   - DI-based service injection
+   - iCloudSyncProtocol, PDFExportProtocol
+   - See: `ROADMAP.md` for details
 
 ---
 
