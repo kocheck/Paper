@@ -106,7 +106,7 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
             schema: Schema([Template.self, Character.self, PageDrawing.self]),
             isStoredInMemoryOnly: false
         ) else {
-            print("❌ Failed to create model container")
+            WidgetLogger.error("Failed to create model container")
             return createErrorEntry(configuration: configuration)
         }
 
@@ -123,23 +123,23 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
             let characters = try modelContext.fetch(descriptor)
 
             guard let character = characters.first else {
-                print("❌ Character not found")
+                WidgetLogger.error("Character not found for ID: \(characterID.uuidString)")
                 return createErrorEntry(configuration: configuration)
             }
 
             // Get the template
             guard let template = character.template else {
-                print("❌ Character has no template")
+                WidgetLogger.error("Character has no template")
                 return createErrorEntry(configuration: configuration)
             }
 
-            // Get the first page drawing (page index 0)
-            let pageDrawing = character.pageDrawings.first { $0.pageIndex == 0 }
+            // Get the first page drawing (page index 0) from the character's drawings
+            // This is more efficient than a separate query since we already have the character
+            let pageDrawing = character.pageDrawings.first(where: { $0.pageIndex == 0 })
 
             // Render the character sheet image
-            let renderConfig: WidgetImageRenderer.RenderConfiguration
-
             // Choose render configuration based on widget size
+            let renderConfig: WidgetImageRenderer.RenderConfiguration
             switch context.family {
             case .systemLarge:
                 renderConfig = .widgetLarge
@@ -157,7 +157,8 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
             let snapshotImage = WidgetImageRenderer.renderCharacterSheetImage(
                 pdfData: template.pdfData,
                 pageIndex: 0,
-                drawingData: pageDrawing?.drawingData
+                drawingData: pageDrawing?.drawingData,
+                configuration: renderConfig
             )
 
             return CharacterSheetEntry(
@@ -170,7 +171,7 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
             )
 
         } catch {
-            print("❌ Failed to fetch character: \(error)")
+            WidgetLogger.error("Failed to fetch character", error: error)
             return createErrorEntry(configuration: configuration)
         }
     }

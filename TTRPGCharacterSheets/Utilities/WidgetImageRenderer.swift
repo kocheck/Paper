@@ -134,12 +134,14 @@ enum WidgetImageRenderer {
     static func renderCharacterSheetImage(
         pdfData: Data,
         pageIndex: Int,
-        drawingData: Data?
+        drawingData: Data?,
+        configuration: RenderConfiguration = .widgetDefault
     ) -> UIImage? {
         let result = renderCharacterSheet(
             pdfData: pdfData,
             pageIndex: pageIndex,
-            drawingData: drawingData
+            drawingData: drawingData,
+            configuration: configuration
         )
 
         switch result {
