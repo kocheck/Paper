@@ -129,7 +129,10 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
         let cachedSchemaModels = Set(modelContainer.schema.entities.map { $0.name })
         let expectedSchemaModels = Set(expectedSchema.entities.map { $0.name })
         if cachedSchemaModels != expectedSchemaModels {
-            assertionFailure("AppGroupContainer returned a ModelContainer with a different schema than requested. Expected models: \(expectedSchemaModels), Got: \(cachedSchemaModels). The cached container may be using an outdated schema; force-quit the app/widget and verify the shared model configuration.")
+            assertionFailure("""
+                Schema mismatch detected. Expected: \(expectedSchemaModels), \
+                Got: \(cachedSchemaModels). Force-quit app/widget to reload schema.
+                """)
         }
         #endif
 
