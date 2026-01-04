@@ -1,5 +1,9 @@
 name: Accessibility Compliance Audit
 
+# NOTE: This workflow contains duplicated logic with pr-quality.yml
+# Future improvement: Extract common steps (Xcode selection, SPM caching, dependency resolution)
+# into reusable composite actions to reduce maintenance burden and ensure consistency.
+
 on:
   pull_request:
     branches:

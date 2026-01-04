@@ -1,5 +1,9 @@
 name: Pull Request Quality Checks
 
+# NOTE: This workflow contains duplicated logic with accessibility-audit.yml
+# Future improvement: Extract common steps (Xcode selection, SPM caching, dependency resolution)
+# into reusable composite actions to reduce maintenance burden and ensure consistency.
+
 on:
   pull_request:
     branches:
