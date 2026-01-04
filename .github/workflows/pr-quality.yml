@@ -1,5 +1,9 @@
 name: Pull Request Quality Checks
 
+# NOTE: This workflow contains duplicated logic with accessibility-audit.yml
+# Future improvement: Extract common steps (Xcode selection, SPM caching, dependency resolution)
+# into reusable composite actions to reduce maintenance burden and ensure consistency.
+
 on:
   pull_request:
     branches:
@@ -18,7 +22,7 @@ env:
   SCHEME_NAME: TTRPGCharacterSheets
   WORKSPACE_NAME: TTRPGCharacterSheets.xcworkspace
   PROJECT_NAME: TTRPGCharacterSheets.xcodeproj
-  IOS_DESTINATION: 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.2'
+  IOS_DESTINATION: 'platform=iOS Simulator,name=iPad Pro (12.9-inch) (6th generation),OS=17.0'
 
 jobs:
   lint:
@@ -79,13 +83,18 @@ jobs:
             ${{ runner.os }}-spm-
 
       - name: Install xcpretty
-        run: gem install xcpretty
+        run: |
+          if ! command -v xcpretty >/dev/null 2>&1; then
+            gem install xcpretty
+          else
+            echo "xcpretty already installed; skipping gem install."
+          fi
 
       - name: Resolve Swift Package dependencies
         run: |
-          if [ -f "$WORKSPACE_NAME" ]; then
+          if [ -d "$WORKSPACE_NAME" ]; then
             xcodebuild -resolvePackageDependencies -workspace "$WORKSPACE_NAME" -scheme "$SCHEME_NAME"
-          elif [ -f "$PROJECT_NAME" ]; then
+          elif [ -d "$PROJECT_NAME" ]; then
             xcodebuild -resolvePackageDependencies -project "$PROJECT_NAME" -scheme "$SCHEME_NAME"
           else
             echo "Warning: No Xcode project or workspace found. Skipping dependency resolution."
@@ -94,7 +103,7 @@ jobs:
 
       - name: Build for testing
         run: |
-          if [ -f "$WORKSPACE_NAME" ]; then
+          if [ -d "$WORKSPACE_NAME" ]; then
             xcodebuild build-for-testing \
               -workspace "$WORKSPACE_NAME" \
               -scheme "$SCHEME_NAME" \
@@ -104,7 +113,7 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               ONLY_ACTIVE_ARCH=YES \
               | xcpretty
-          elif [ -f "$PROJECT_NAME" ]; then
+          elif [ -d "$PROJECT_NAME" ]; then
             xcodebuild build-for-testing \
               -project "$PROJECT_NAME" \
               -scheme "$SCHEME_NAME" \
@@ -122,7 +131,7 @@ jobs:
 
       - name: Run unit tests
         run: |
-          if [ -f "$WORKSPACE_NAME" ]; then
+          if [ -d "$WORKSPACE_NAME" ]; then
             xcodebuild test-without-building \
               -workspace "$WORKSPACE_NAME" \
               -scheme "$SCHEME_NAME" \
@@ -131,7 +140,7 @@ jobs:
               CODE_SIGN_IDENTITY="" \
               CODE_SIGNING_REQUIRED=NO \
               | xcpretty --report junit
-          elif [ -f "$PROJECT_NAME" ]; then
+          elif [ -d "$PROJECT_NAME" ]; then
             xcodebuild test-without-building \
               -project "$PROJECT_NAME" \
               -scheme "$SCHEME_NAME" \
@@ -189,7 +198,7 @@ jobs:
 
       - name: Build app for iOS 17
         run: |
-          if [ -f "$WORKSPACE_NAME" ]; then
+          if [ -d "$WORKSPACE_NAME" ]; then
             xcodebuild build \
               -workspace "$WORKSPACE_NAME" \
               -scheme "$SCHEME_NAME" \
@@ -199,7 +208,7 @@ jobs:
               CODE_SIGNING_REQUIRED=NO \
               ONLY_ACTIVE_ARCH=YES \
               | xcpretty
-          elif [ -f "$PROJECT_NAME" ]; then
+          elif [ -d "$PROJECT_NAME" ]; then
             xcodebuild build \
               -project "$PROJECT_NAME" \
               -scheme "$SCHEME_NAME" \

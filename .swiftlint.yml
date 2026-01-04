@@ -220,10 +220,10 @@ vertical_whitespace:
 # File header
 file_header:
   required_pattern: |
-    \/\/
-    \/\/  .*\.swift
-    \/\/  TTRPGCharacterSheets
-    \/\/
+    //
+    //  .*\.swift
+    //  TTRPGCharacterSheets
+    //
 
 # Reporter type
 reporter: "xcode"
@@ -253,6 +253,6 @@ custom_rules:
   # Ensure TODO/FIXME comments have issue references
   todo_with_issue:
     name: "TODO with Issue Reference"
-    regex: '\/\/\s*(TODO|FIXME)(?!.*#\d+)'
+    regex: '\/\/\s*(TODO|FIXME):?\s*(?!#\d+)'
     message: "TODO/FIXME comments should reference a GitHub issue: // TODO: #123 Description"
     severity: warning
