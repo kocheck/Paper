@@ -194,43 +194,56 @@ jobs:
         run: |
           echo "## 🔍 Accessibility Audit Summary" > accessibility-summary.md
           echo "" >> accessibility-summary.md
+          echo "_Note: This workflow runs UI tests to check for accessibility issues._" >> accessibility-summary.md
+          echo "_To enable automated accessibility audits, implement XCTAccessibilityAudit API in your UI tests._" >> accessibility-summary.md
+          echo "_See: https://developer.apple.com/documentation/xctest/xctestcase/accessibility_audits_" >> accessibility-summary.md
+          echo "" >> accessibility-summary.md
 
-          # Count accessibility violations
+          # Check for test failures in the log
           if [ -f ui_test_output.log ]; then
-            MISSING_LABELS=$(grep -c "missing accessibility label" ui_test_output.log || echo "0")
-            MISSING_TRAITS=$(grep -c "missing accessibility trait" ui_test_output.log || echo "0")
-            CONTRAST_ISSUES=$(grep -c "insufficient contrast" ui_test_output.log || echo "0")
-            TOUCH_TARGET_ISSUES=$(grep -c "touch target too small" ui_test_output.log || echo "0")
+            # Check for XCTest failures which might indicate accessibility issues
+            TEST_FAILURES=$(grep -c "Test Case.*failed" ui_test_output.log || echo "0")
+            ACCESSIBILITY_AUDIT_FAILURES=$(grep -c "Accessibility audit" ui_test_output.log || echo "0")
+            
+            echo "### Test Results:" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            echo "- **Test Failures**: $TEST_FAILURES" >> accessibility-summary.md
+            echo "- **Accessibility Audit Issues**: $ACCESSIBILITY_AUDIT_FAILURES" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            
+            TOTAL_VIOLATIONS=$ACCESSIBILITY_AUDIT_FAILURES
           else
-            echo "_Note: ui_test_output.log not found; assuming 0 accessibility violations._" >> accessibility-summary.md
-            MISSING_LABELS=0
-            MISSING_TRAITS=0
-            CONTRAST_ISSUES=0
-            TOUCH_TARGET_ISSUES=0
+            echo "_Note: ui_test_output.log not found. No test results available._" >> accessibility-summary.md
+            TOTAL_VIOLATIONS=0
           fi
 
-          echo "### Violations Found:" >> accessibility-summary.md
-          echo "" >> accessibility-summary.md
-          echo "- **Missing Labels**: $MISSING_LABELS" >> accessibility-summary.md
-          echo "- **Missing Traits**: $MISSING_TRAITS" >> accessibility-summary.md
-          echo "- **Contrast Issues**: $CONTRAST_ISSUES" >> accessibility-summary.md
-          echo "- **Touch Target Issues**: $TOUCH_TARGET_ISSUES" >> accessibility-summary.md
-          echo "" >> accessibility-summary.md
-
-          TOTAL_VIOLATIONS=$((MISSING_LABELS + MISSING_TRAITS + CONTRAST_ISSUES + TOUCH_TARGET_ISSUES))
-
           if [ $TOTAL_VIOLATIONS -eq 0 ]; then
+            echo "" >> accessibility-summary.md
             echo "✅ **Status**: No accessibility violations detected!" >> accessibility-summary.md
             echo "status=passed" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ **Status**: $TOTAL_VIOLATIONS accessibility violation(s) detected" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            echo "⚠️ **Status**: $TOTAL_VIOLATIONS accessibility issue(s) detected" >> accessibility-summary.md
             echo "status=failed" >> $GITHUB_OUTPUT
 
+            echo "" >> accessibility-summary.md
+            echo "### How to Implement Accessibility Audits:" >> accessibility-summary.md
+            echo "" >> accessibility-summary.md
+            echo "Add XCTAccessibilityAudit API calls in your UI tests:" >> accessibility-summary.md
+            echo '```swift' >> accessibility-summary.md
+            echo 'func testAccessibility() throws {' >> accessibility-summary.md
+            echo '    let app = XCUIApplication()' >> accessibility-summary.md
+            echo '    app.launch()' >> accessibility-summary.md
+            echo '    ' >> accessibility-summary.md
+            echo '    // Perform accessibility audit' >> accessibility-summary.md
+            echo '    try app.performAccessibilityAudit()' >> accessibility-summary.md
+            echo '}' >> accessibility-summary.md
+            echo '```' >> accessibility-summary.md
             echo "" >> accessibility-summary.md
             echo "### Common Accessibility Guidelines:" >> accessibility-summary.md
             echo "" >> accessibility-summary.md
             echo "1. **Accessibility Labels**: All interactive elements should have descriptive labels" >> accessibility-summary.md
-            echo "2. **Accessibility Traits**: Buttons should have `.button` trait, images `.image`, etc." >> accessibility-summary.md
+            echo "2. **Accessibility Traits**: Buttons should have \`.button\` trait, images \`.image\`, etc." >> accessibility-summary.md
             echo "3. **Color Contrast**: Maintain 4.5:1 contrast ratio for text (WCAG AA)" >> accessibility-summary.md
             echo "4. **Touch Targets**: Minimum 44x44 points for all interactive elements" >> accessibility-summary.md
             echo "5. **VoiceOver Support**: Test navigation with VoiceOver enabled" >> accessibility-summary.md
@@ -354,9 +367,21 @@ jobs:
           ## Testing Procedures
 
           ### Automated Testing
-          1. Run UI tests with `-enableAccessibilityAudit YES` flag
+          1. Implement XCTAccessibilityAudit API in UI tests (recommended approach)
           2. Use Xcode Accessibility Inspector during development
           3. Review Xcode warnings for missing labels/traits
+          4. Run UI tests through this GitHub Actions workflow
+
+          **Example XCTAccessibilityAudit implementation:**
+          \`\`\`swift
+          func testAccessibility() throws {
+              let app = XCUIApplication()
+              app.launch()
+              
+              // Perform accessibility audit on the current screen
+              try app.performAccessibilityAudit()
+          }
+          \`\`\`
 
           ### Manual Testing
           1. Enable VoiceOver: Settings → Accessibility → VoiceOver
