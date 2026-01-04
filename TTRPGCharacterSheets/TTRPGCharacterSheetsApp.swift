@@ -7,6 +7,7 @@
 
 import SwiftUI
 import SwiftData
+import os
 
 @main
 struct TTRPGCharacterSheetsApp: App {
@@ -134,6 +135,9 @@ class StateRestorationManager: ObservableObject {
     @Published var characterToRestore: UUID?
     @Published var pageIndexToRestore: Int = 0
 
+    /// Logger for state restoration operations
+    private static let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TTRPGCharacterSheets", category: "StateRestoration")
+
     /// Shared UserDefaults for App Group access
     /// Main app writes state that the widget extension reads
     private var sharedDefaults: UserDefaults? {
@@ -147,7 +151,10 @@ class StateRestorationManager: ObservableObject {
     /// Loads the restoration state from shared UserDefaults
     func loadRestorationState() {
         guard let defaults = sharedDefaults else {
-            print("⚠️ StateRestorationManager: sharedDefaults is nil - App Groups may not be configured properly")
+            Self.logger.error("sharedDefaults is nil - App Groups may not be configured properly")
+            #if DEBUG
+            assertionFailure("StateRestorationManager: sharedDefaults is nil - App Groups configuration required")
+            #endif
             return
         }
 
@@ -162,7 +169,10 @@ class StateRestorationManager: ObservableObject {
     /// Saves the current state for restoration (accessible by widget)
     func saveState(characterID: UUID, pageIndex: Int) {
         guard let defaults = sharedDefaults else {
-            print("⚠️ StateRestorationManager.saveState: sharedDefaults is nil - App Groups may not be configured properly")
+            Self.logger.error("saveState: sharedDefaults is nil - App Groups may not be configured properly")
+            #if DEBUG
+            assertionFailure("StateRestorationManager.saveState: sharedDefaults is nil - App Groups configuration required")
+            #endif
             return
         }
 
@@ -173,7 +183,10 @@ class StateRestorationManager: ObservableObject {
     /// Clears the restoration state
     func clearState() {
         guard let defaults = sharedDefaults else {
-            print("⚠️ StateRestorationManager.clearState: sharedDefaults is nil - App Groups may not be configured properly")
+            Self.logger.error("clearState: sharedDefaults is nil - App Groups may not be configured properly")
+            #if DEBUG
+            assertionFailure("StateRestorationManager.clearState: sharedDefaults is nil - App Groups configuration required")
+            #endif
             return
         }
 

@@ -122,19 +122,24 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
             return createErrorEntry(configuration: configuration, characterID: characterID)
         }
 
-        #if DEBUG
         // Validate that the cached container's schema matches the requested schema.
         // This helps catch cases where the schema has changed but the cached container
-        // is still using an outdated schema during development.
+        // is still using an outdated schema (e.g., after an app update).
         let cachedSchemaModels = Set(modelContainer.schema.entities.map { $0.name })
         let expectedSchemaModels = Set(expectedSchema.entities.map { $0.name })
         if cachedSchemaModels != expectedSchemaModels {
+            WidgetLogger.error("""
+                Schema mismatch detected. Expected: \(expectedSchemaModels), \
+                Got: \(cachedSchemaModels). Widget entry will be invalidated.
+                """)
+            #if DEBUG
             assertionFailure("""
                 Schema mismatch detected. Expected: \(expectedSchemaModels), \
                 Got: \(cachedSchemaModels). Force-quit app/widget to reload schema.
                 """)
+            #endif
+            return createErrorEntry(configuration: configuration, characterID: characterID)
         }
-        #endif
 
         let modelContext = ModelContext(modelContainer)
 
