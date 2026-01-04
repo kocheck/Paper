@@ -10,12 +10,6 @@ on:
       - 'TTRPGCharacterSheets/**/*.storyboard'
       - '.github/workflows/accessibility-audit.yml'
   workflow_dispatch:
-    inputs:
-      verbose_logging:
-        description: 'Enable verbose accessibility logging'
-        required: false
-        default: 'false'
-        type: boolean
 
 env:
   DEVELOPER_DIR: /Applications/Xcode_15.2.app/Contents/Developer
@@ -61,7 +55,7 @@ jobs:
           # Check if the required simulator exists
           if ! xcrun simctl list devices | grep -q "iPad Pro (12.9-inch) (6th generation)"; then
             echo "Creating iPad Pro simulator..."
-            xcrun simctl create "iPad Pro (12.9-inch) (6th generation)" "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-12-9-inch-6th-generation-8A" "com.apple.CoreSimulator.SimRuntime.iOS-17-2"
+            xcrun simctl create "iPad Pro (12.9-inch) (6th generation)" "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-12-9-inch-6th-generation" "com.apple.CoreSimulator.SimRuntime.iOS-17-2"
           fi
 
       - name: Boot simulator
@@ -70,6 +64,9 @@ jobs:
           echo "Booting simulator: $SIMULATOR_ID"
           xcrun simctl boot "$SIMULATOR_ID" || true
           sleep 5
+
+      - name: Install xcpretty
+        run: gem install xcpretty
 
       - name: Resolve Swift Package dependencies
         run: |
@@ -151,10 +148,18 @@ jobs:
           echo "" >> accessibility-summary.md
 
           # Count accessibility violations
-          MISSING_LABELS=$(grep -c "missing accessibility label" ui_test_output.log || echo "0")
-          MISSING_TRAITS=$(grep -c "missing accessibility trait" ui_test_output.log || echo "0")
-          CONTRAST_ISSUES=$(grep -c "insufficient contrast" ui_test_output.log || echo "0")
-          TOUCH_TARGET_ISSUES=$(grep -c "touch target too small" ui_test_output.log || echo "0")
+          if [ -f ui_test_output.log ]; then
+            MISSING_LABELS=$(grep -c "missing accessibility label" ui_test_output.log)
+            MISSING_TRAITS=$(grep -c "missing accessibility trait" ui_test_output.log)
+            CONTRAST_ISSUES=$(grep -c "insufficient contrast" ui_test_output.log)
+            TOUCH_TARGET_ISSUES=$(grep -c "touch target too small" ui_test_output.log)
+          else
+            echo "_Note: ui_test_output.log not found; assuming 0 accessibility violations._" >> accessibility-summary.md
+            MISSING_LABELS=0
+            MISSING_TRAITS=0
+            CONTRAST_ISSUES=0
+            TOUCH_TARGET_ISSUES=0
+          fi
 
           echo "### Violations Found:" >> accessibility-summary.md
           echo "" >> accessibility-summary.md

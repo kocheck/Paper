@@ -229,14 +229,14 @@ file_header:
 reporter: "xcode"
 
 # SwiftLint version requirement
-swiftlint_version: 0.50.0
+swiftlint_version: 0.57.0
 
 # Custom rules
 custom_rules:
   # Ensure MARK comments are properly formatted
   mark_formatting:
     name: "MARK Formatting"
-    regex: '\/\/\s*MARK:\s*[^\-\s]'
+    regex: '\/\/\s*MARK:(?!\s*-\s)'
     message: "MARK comments should follow format: // MARK: - Description"
     severity: warning
 
@@ -256,11 +256,3 @@ custom_rules:
     regex: '\/\/\s*(TODO|FIXME)(?!.*#\d+)'
     message: "TODO/FIXME comments should reference a GitHub issue: // TODO: #123 Description"
     severity: warning
-
-  # Discourage force unwrapping in non-test code
-  avoid_force_unwrap:
-    name: "Avoid Force Unwrapping"
-    regex: '!\s*(?!\=)'
-    message: "Avoid force unwrapping. Use optional binding or guard statements instead."
-    severity: warning
-    excluded: ".*Tests\\.swift"

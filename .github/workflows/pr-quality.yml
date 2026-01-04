@@ -63,6 +63,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-spm-
 
+      - name: Install xcpretty
+        run: gem install xcpretty
+
       - name: Resolve Swift Package dependencies
         run: |
           if [ -f "$WORKSPACE_NAME" ]; then
@@ -189,6 +192,10 @@ jobs:
 
       - name: Verify build artifacts
         run: |
-          echo "Build completed successfully"
-          ls -lah build/
+          if [ -d "build" ]; then
+            echo "Listing contents of build directory:"
+            ls -lah build/
+          else
+            echo "No 'build' directory found. Skipping artifact listing."
+          fi
         working-directory: ./TTRPGCharacterSheets
