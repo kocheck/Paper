@@ -318,6 +318,12 @@ enum WidgetImageRenderer {
 // MARK: - UIGraphicsImageRendererFormat Extension
 
 private extension UIGraphicsImageRendererFormat {
+    /// Applies configuration to the format and returns self.
+    ///
+    /// **Note:** This is a mutating pattern where the receiver is modified in-place.
+    /// The returned format is the same instance that was modified, not a copy.
+    /// This allows for chained configuration while maintaining the specific format
+    /// subclass type (e.g., UIGraphicsImageRendererFormat vs its subclasses).
     func applying(_ configure: (UIGraphicsImageRendererFormat) -> Void) -> UIGraphicsImageRendererFormat {
         configure(self)
         return self
