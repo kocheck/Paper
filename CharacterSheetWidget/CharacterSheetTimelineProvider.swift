@@ -36,7 +36,7 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
     func placeholder(in context: Context) -> CharacterSheetEntry {
         CharacterSheetEntry(
             date: Date(),
-            characterID: nil,
+            characterID: UUID(), // Non-nil placeholder UUID for debugging
             characterName: "Character Name",
             templateName: "D&D 5E",
             snapshotImage: WidgetImageRenderer.generatePlaceholderImage(),
@@ -113,13 +113,28 @@ struct CharacterSheetTimelineProvider: AppIntentTimelineProvider {
     ) async -> CharacterSheetEntry {
         // Create or reuse cached model container from AppGroupContainer
         // After the first creation, AppGroupContainer returns the cached instance to reduce overhead
+        let expectedSchema = Schema([Template.self, Character.self, PageDrawing.self])
         guard let modelContainer = try? AppGroupContainer.createModelContainer(
-            schema: Schema([Template.self, Character.self, PageDrawing.self]),
+            schema: expectedSchema,
             isStoredInMemoryOnly: false
         ) else {
             WidgetLogger.error("Failed to create model container")
             return createErrorEntry(configuration: configuration, characterID: characterID)
         }
+
+        #if DEBUG
+        // Validate that the cached container's schema matches the requested schema.
+        // This helps catch cases where the schema has changed but the cached container
+        // is still using an outdated schema during development.
+        let cachedSchemaModels = Set(modelContainer.schema.entities.map { $0.name })
+        let expectedSchemaModels = Set(expectedSchema.entities.map { $0.name })
+        if cachedSchemaModels != expectedSchemaModels {
+            assertionFailure("""
+                Schema mismatch detected. Expected: \(expectedSchemaModels), \
+                Got: \(cachedSchemaModels). Force-quit app/widget to reload schema.
+                """)
+        }
+        #endif
 
         let modelContext = ModelContext(modelContainer)
 

@@ -81,6 +81,9 @@ enum AppGroupContainer {
         isStoredInMemoryOnly: Bool = false
     ) throws -> ModelContainer {
         // For non-memory containers, return cached instance if available
+        // Note: ModelContainer is thread-safe for concurrent read operations
+        // (multiple contexts can read simultaneously). The lock here only protects
+        // the cache variable itself, not the container's internal operations.
         if !isStoredInMemoryOnly {
             containerLock.lock()
             let cached = cachedModelContainer
