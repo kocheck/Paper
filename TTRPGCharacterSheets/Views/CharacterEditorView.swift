@@ -15,152 +15,196 @@ struct CharacterEditorView: View {
     @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
     @EnvironmentObject private var stateRestoration: StateRestorationManager
-    @StateObject private var preferences = UserPreferences.shared
 
     // MARK: - Properties
     @Bindable var character: Character
 
-    // MARK: - State
-    @State private var currentPageIndex: Int
-    @State private var showingToolPicker = false
-    @State private var showingExportView = false
-    @State private var pdfDocument: PDFDocument?
-    @State private var hasUnsavedChanges = false
+    // MARK: - ViewModel
+    @State private var viewModel: CharacterEditorViewModel?
 
     // MARK: - Initialization
     init(character: Character) {
         self.character = character
-        // Initialize current page from character's last viewed page
-        _currentPageIndex = State(initialValue: character.lastViewedPageIndex)
     }
 
     // MARK: - Body
     var body: some View {
         NavigationStack {
-            ZStack {
-                if let pdfDoc = pdfDocument {
-                    // Multi-page PDF + PencilKit view
-                    if preferences.pageTransitionStyle == .pageCurl {
-                        // Page curl animation
-                        PageCurlView(
-                            pdfDocument: pdfDoc,
-                            character: character,
-                            currentPageIndex: $currentPageIndex,
-                            hasUnsavedChanges: $hasUnsavedChanges
-                        )
-                        .ignoresSafeArea(edges: .bottom)
-                    } else {
-                        // Standard TabView
-                        PagedPDFCanvasView(
-                            pdfDocument: pdfDoc,
-                            character: character,
-                            currentPageIndex: $currentPageIndex,
-                            hasUnsavedChanges: $hasUnsavedChanges
-                        )
-                    }
+            Group {
+                if let vm = viewModel {
+                    contentView(vm: vm)
                 } else {
-                    // Loading state
-                    ProgressView("Loading character sheet...")
+                    ProgressView("Initializing...")
                 }
             }
-            .navigationTitle(character.name)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        saveAndDismiss()
-                    } label: {
-                        Label("Close", systemImage: "xmark")
-                    }
-                }
-
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        if hasUnsavedChanges {
-                            Image(systemName: "circle.fill")
-                                .foregroundStyle(.orange)
-                                .imageScale(.small)
-                        }
-
-                        Button {
-                            showingExportView = true
-                        } label: {
-                            Label("Export", systemImage: "square.and.arrow.up")
-                        }
-
-                        Button {
-                            showingToolPicker.toggle()
-                        } label: {
-                            Label("Tools", systemImage: "pencil.tip.crop.circle")
-                        }
-                    }
-                }
-
-                ToolbarItemGroup(placement: .bottomBar) {
-                    // Page navigation
-                    Button {
-                        navigateToPage(currentPageIndex - 1)
-                    } label: {
-                        Label("Previous Page", systemImage: "chevron.left")
-                    }
-                    .disabled(currentPageIndex == 0)
-
-                    Spacer()
-
-                    Text("Page \(currentPageIndex + 1) of \(character.pageCount)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-
-                    Spacer()
-
-                    Button {
-                        navigateToPage(currentPageIndex + 1)
-                    } label: {
-                        Label("Next Page", systemImage: "chevron.right")
-                    }
-                    .disabled(currentPageIndex >= character.pageCount - 1)
-                }
-            }
-            .sheet(isPresented: $showingToolPicker) {
-                ToolPickerView()
-            }
-            .sheet(isPresented: $showingExportView) {
-                PDFExportView(character: character)
-            }
-            .onAppear {
-                loadPDF()
-                // Save state for restoration
-                stateRestoration.saveState(characterID: character.id, pageIndex: currentPageIndex)
-            }
-            .onChange(of: currentPageIndex) { oldValue, newValue in
-                character.lastViewedPageIndex = newValue
-                stateRestoration.saveState(characterID: character.id, pageIndex: newValue)
-            }
+        }
+        .onAppear {
+            initializeViewModel()
         }
     }
 
-    // MARK: - Actions
-    private func loadPDF() {
-        guard let template = character.template else { return }
-        pdfDocument = PDFDocument(data: template.pdfData)
-    }
+    // MARK: - Content View
+    @ViewBuilder
+    private func contentView(vm: CharacterEditorViewModel) -> some View {
+        ZStack {
+            if let pdfDoc = vm.pdfDocument {
+                // Multi-page PDF + PencilKit view
+                if vm.pageTransitionStyle == .pageCurl {
+                    // Page curl animation
+                    PageCurlView(
+                        pdfDocument: pdfDoc,
+                        character: character,
+                        currentPageIndex: Binding(
+                            get: { vm.currentPageIndex },
+                            set: { vm.currentPageIndex = $0 }
+                        ),
+                        hasUnsavedChanges: $vm.hasUnsavedChanges
+                    )
+                    .ignoresSafeArea(edges: .bottom)
+                    .environment(\.characterEditorViewModel, vm)
+                } else {
+                    // Standard TabView
+                    PagedPDFCanvasView(
+                        pdfDocument: pdfDoc,
+                        character: character,
+                        currentPageIndex: Binding(
+                            get: { vm.currentPageIndex },
+                            set: { vm.currentPageIndex = $0 }
+                        ),
+                        hasUnsavedChanges: $vm.hasUnsavedChanges
+                    )
+                    .environment(\.characterEditorViewModel, vm)
+                }
+            } else if vm.isLoading {
+                // Loading state
+                ProgressView("Loading character sheet...")
+            } else {
+                // Error state
+                ContentUnavailableView(
+                    "Unable to Load PDF",
+                    systemImage: "doc.text.fill",
+                    description: Text("The character sheet template could not be loaded.")
+                )
+            }
+        }
+        .navigationTitle(character.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    vm.saveAndDismiss { dismiss() }
+                } label: {
+                    Label("Close", systemImage: "xmark")
+                }
+            }
 
-    private func navigateToPage(_ pageIndex: Int) {
-        guard pageIndex >= 0 && pageIndex < character.pageCount else { return }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack {
+                    if vm.hasUnsavedChanges {
+                        Image(systemName: "circle.fill")
+                            .foregroundStyle(.orange)
+                            .imageScale(.small)
+                    }
 
-        withAnimation(.easeInOut(duration: 0.3)) {
-            currentPageIndex = pageIndex
+                    // Undo/Redo buttons
+                    Button {
+                        vm.undo()
+                    } label: {
+                        Label("Undo", systemImage: "arrow.uturn.backward")
+                    }
+                    .disabled(!vm.canUndo)
+                    .keyboardShortcut("z", modifiers: .command)
+                    .accessibilityLabel(vm.canUndo ? "Undo" : "Undo (no actions available)")
+                    .accessibilityHint(vm.canUndo ? "Double tap to undo the last action" : "")
+
+                    Button {
+                        vm.redo()
+                    } label: {
+                        Label("Redo", systemImage: "arrow.uturn.forward")
+                    }
+                    .disabled(!vm.canRedo)
+                    .keyboardShortcut("z", modifiers: [.command, .shift])
+                    .accessibilityLabel(vm.canRedo ? "Redo" : "Redo (no actions available)")
+                    .accessibilityHint(vm.canRedo ? "Double tap to redo the last undone action" : "")
+
+                    Button {
+                        vm.showExportView()
+                    } label: {
+                        Label("Export", systemImage: "square.and.arrow.up")
+                    }
+
+                    Button {
+                        vm.showToolPicker()
+                    } label: {
+                        Label("Tools", systemImage: "pencil.tip.crop.circle")
+                    }
+                }
+            }
+
+            ToolbarItemGroup(placement: .bottomBar) {
+                // Page navigation
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        vm.navigateToPreviousPage()
+                    }
+                } label: {
+                    Label("Previous Page", systemImage: "chevron.left")
+                }
+                .disabled(!vm.canNavigatePrevious)
+
+                Spacer()
+
+                Text(vm.pageNumberLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                Spacer()
+
+                Button {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        vm.navigateToNextPage()
+                    }
+                } label: {
+                    Label("Next Page", systemImage: "chevron.right")
+                }
+                .disabled(!vm.canNavigateNext)
+            }
+        }
+        .sheet(isPresented: Binding(
+            get: { vm.showingToolPicker },
+            set: { if !$0 { vm.hideToolPicker() } }
+        )) {
+            ToolPickerView()
+        }
+        .sheet(isPresented: Binding(
+            get: { vm.showingExportView },
+            set: { if !$0 { vm.hideExportView() } }
+        )) {
+            PDFExportView(character: character)
+        }
+        .alert("Save Error", isPresented: Binding(
+            get: { vm.showingSaveError },
+            set: { if !$0 { vm.showingSaveError = false } }
+        )) {
+            // Empty action - alert dismissal is automatically handled by the isPresented binding
+            // When the user taps OK, SwiftUI sets isPresented to false, which triggers the setter above
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(vm.saveErrorMessage ?? "An unknown error occurred while saving.")
         }
     }
 
-    private func saveAndDismiss() {
-        // Update modification date
-        character.updateModificationDate()
+    // MARK: - Helper Methods
+    private func initializeViewModel() {
+        guard viewModel == nil else { return }
 
-        // Save context
-        try? modelContext.save()
-
-        dismiss()
+        let vm = CharacterEditorViewModel(
+            character: character,
+            modelContext: modelContext,
+            stateRestoration: stateRestoration
+        )
+        vm.loadPDF()
+        viewModel = vm
     }
 }
 
@@ -200,6 +244,7 @@ struct PDFCanvasPageView: View {
     @Binding var hasUnsavedChanges: Bool
 
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.characterEditorViewModel) private var viewModel
 
     @State private var canvasView: PKCanvasView?
     @State private var autoSaveTimer: Timer?
@@ -219,6 +264,9 @@ struct PDFCanvasPageView: View {
                     onDrawingChanged: {
                         hasUnsavedChanges = true
                         scheduleAutoSave()
+                    },
+                    onUndoManagerChanged: { undoManager in
+                        viewModel?.registerUndoManager(undoManager)
                     }
                 )
             }
@@ -327,6 +375,7 @@ struct PencilKitCanvasView: UIViewRepresentable {
     let character: Character
     @Binding var canvasView: PKCanvasView?
     let onDrawingChanged: () -> Void
+    let onUndoManagerChanged: ((UndoManager?) -> Void)?
 
     func makeUIView(context: Context) -> PKCanvasView {
         let canvas = PKCanvasView()
@@ -352,10 +401,9 @@ struct PencilKitCanvasView: UIViewRepresentable {
         toolPicker?.addObserver(canvas)
         canvas.becomeFirstResponder()
 
-        // Store reference
-        DispatchQueue.main.async {
-            canvasView = canvas
-        }
+        // Store reference and expose undo manager
+        canvasView = canvas
+        onUndoManagerChanged?(canvas.undoManager)
 
         return canvas
     }
